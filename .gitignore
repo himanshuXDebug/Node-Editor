@@ -1,1 +1,13 @@
-node_modules
+# Ignore environment files
+*.env
+
+# Node dependencies
+node_modules/
+
+# Build folders
+dist/
+build/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
