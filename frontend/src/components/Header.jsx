@@ -1,3 +1,4 @@
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronRight,
   RotateCcw,
@@ -25,8 +26,11 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { useState } from "react";
 import { DraggableNode } from "../draggableNode";
+import { useRunPanelStore } from "../stores/useRunPanelStore";
+import { useStore } from '../store';
+import { shallow } from 'zustand/shallow';
+
 
 const nodeTabs = [
   {
@@ -102,10 +106,20 @@ const nodeTabs = [
   },
 ];
 
+const selector = (state) => ({
+  nodes: state.nodes,
+  edges: state.edges,
+});
+
 export default function Header() {
   const [activeTab, setActiveTab] = useState("Objects");
   const [searchTerm, setSearchTerm] = useState("");
   const [isNodesVisible, setIsNodesVisible] = useState(true);
+  const [error, setError] = useState('');
+  
+ const openPanel = useRunPanelStore(state => state.openPanel);
+  
+  const { nodes, edges } = useStore(selector, shallow);
 
   const getFilteredNodes = () => {
     const currentTab = nodeTabs.find((tab) => tab.label === activeTab);
@@ -120,10 +134,8 @@ export default function Header() {
 
   const handleTabClick = (label) => {
     if (activeTab === label) {
-      // If clicking the same tab, toggle nodes visibility
       setIsNodesVisible(!isNodesVisible);
     } else {
-      // If switching tabs, show nodes and clear search
       setActiveTab(label);
       setSearchTerm("");
       setIsNodesVisible(true);
@@ -134,125 +146,210 @@ export default function Header() {
     setIsNodesVisible(!isNodesVisible);
   };
 
+  // Helper function to check if there's a path between nodes
+  const hasPath = (sourceId, targetId, edges, visited = new Set()) => {
+    if (sourceId === targetId) return true;
+    if (visited.has(sourceId)) return false;
+    
+    visited.add(sourceId);
+    
+    const outgoingEdges = edges.filter(e => e.source === sourceId);
+    for (const edge of outgoingEdges) {
+      if (hasPath(edge.target, targetId, edges, visited)) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Check connectivity between input and output nodes
+  const checkNodeConnectivity = (nodes, edges) => {
+    const inputNodes = nodes.filter(n => n.type === 'customInput');
+    const outputNodes = nodes.filter(n => n.type === 'customOutput');
+    
+    // Simple path checking - can be enhanced
+    for (const inputNode of inputNodes) {
+      for (const outputNode of outputNodes) {
+        if (hasPath(inputNode.id, outputNode.id, edges)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // const validateGraph = () => {
+  //   const hasInput = nodes.some(n => n.type === 'customInput');
+  //   const hasLLM = nodes.some(n => n.type === 'llm');
+  //   const hasOutput = nodes.some(n => n.type === 'customOutput');
+    
+  //   if (!hasInput) {
+  //     setError("Add an Input node to receive user messages");
+  //     return false;
+  //   }
+  //   if (!hasLLM) {
+  //     setError("Add an LLM node to process messages");
+  //     return false;
+  //   }
+  //   if (!hasOutput) {
+  //     setError("Add an Output node to send responses");
+  //     return false;
+  //   }
+
+  //   const isConnected = checkNodeConnectivity(nodes, edges);
+  //   if (!isConnected) {
+  //     setError("Connect your nodes to create a complete workflow");
+  //     return false;
+  //   }
+
+  //   return true;
+  // };
+
+  const onRunClick = () => {
+  // if (!validateGraph()) {
+  //   return;
+  // }
+  setError("");
+  openPanel(); 
+};
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   return (
-    <header className="border-b-2 border-gray-200/60 bg-gradient-to-br from-white via-slate-50/50 to-gray-100/30 backdrop-blur-xl shadow-lg">
-      <div className="flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-3 text-sm text-gray-700">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/80 shadow-sm ring-1 ring-gray-200/50">
-            <span className="font-semibold text-gray-800">Pipelines</span>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-            <span className="font-bold text-gray-900">Untitled Pipeline 1</span>
-          </div>
-          <button className="px-3 py-1.5 rounded-lg border-2 border-blue-300/60 bg-white/90 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-all duration-200 shadow-sm">
-            Edit
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-white/80 rounded-lg p-1 shadow-sm ring-1 ring-gray-200/50">
-            <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
-              <RotateCcw className="h-4 w-4 text-gray-600" />
-            </button>
-            <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
-              <RotateCw className="h-4 w-4 text-gray-600" />
+    <>
+      <header className="border-b-2 border-gray-200/60 bg-gradient-to-br from-white via-slate-50/50 to-gray-100/30 backdrop-blur-xl shadow-lg">
+        <div className="flex items-center justify-between px-4 h-14">
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/80 shadow-sm ring-1 ring-gray-200/50">
+              <span className="font-semibold text-gray-800">Pipelines</span>
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+              <span className="font-bold text-gray-900">Untitled Pipeline 1</span>
+            </div>
+            <button className="px-3 py-1.5 rounded-lg border-2 border-blue-300/60 bg-white/90 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-all duration-200 shadow-sm">
+              Edit
             </button>
           </div>
 
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200">
-            <Play className="h-4 w-4" />
-            Run
-          </button>
-          <button className="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white/90 text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm">
-            Export
-          </button>
-        </div>
-      </div>
-
-      <div className="border-t h-auto overflow-hidden border-gray-200 bg-gray-400/10">
-        <div className="flex items-center justify-between h-12 px-10">
-          <div className="flex items-center gap-8">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search nodes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-8 w-56 pl-10 pr-4 rounded-lg bg-white border-2 border-gray-200/60 text-sm outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 shadow-sm"
-              />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-white/80 rounded-lg p-1 shadow-sm ring-1 ring-gray-200/50">
+              <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
+                <RotateCcw className="h-4 w-4 text-gray-600" />
+              </button>
+              <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
+                <RotateCw className="h-4 w-4 text-gray-600" />
+              </button>
             </div>
 
-            <div className="flex items-center gap-6">
-              {nodeTabs.map(({ label, color }) => (
-                <button
-                  key={label}
-                  onClick={() => handleTabClick(label)}
-                  className={`relative text-sm font-semibold px-2 py-1 rounded-md transition-all duration-200 ${activeTab === label
+            <button
+              onClick={onRunClick}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200"
+              title="Run"
+            >
+              <Play className="h-4 w-4" />
+              Run
+            </button>
+            <button className="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white/90 text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm">
+              Export
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t h-auto overflow-hidden border-gray-200 bg-gray-400/10">
+          <div className="flex items-center justify-between h-12 px-10">
+            <div className="flex items-center gap-8">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search nodes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-8 w-56 pl-10 pr-4 rounded-lg bg-white border-2 border-gray-200/60 text-sm outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 shadow-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-6">
+                {nodeTabs.map(({ label, color }) => (
+                  <button
+                    key={label}
+                    onClick={() => handleTabClick(label)}
+                    className={`relative text-sm font-semibold px-2 py-1 rounded-md transition-all duration-200 ${
+                      activeTab === label
                       ? `text-white bg-gradient-to-r ${color} shadow-md after:absolute after:-bottom-3 after:left-1/2 after:-translate-x-1/2 after:w-8 after:h-1 after:bg-gradient-to-r after:${color} after:rounded-full`
                       : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
                     }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {isNodesVisible && (
-            <button
-              onClick={toggleNodesVisibility}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-            >
-              <span className="text-xs font-medium text-gray-600">Hide </span>
-              <ChevronUp className="h-4 w-4 text-gray-500" />
-            </button>
-          )}
-
-          {!isNodesVisible && (
-            <button
-              onClick={toggleNodesVisibility}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-            >
-              <span className="text-xs font-medium text-gray-600">Show </span>
-              <ChevronDown className="h-4 w-4 text-gray-500" />
-            </button>
-          )}
-        </div>
-
-        <div
-          className={`transition-all duration-100 ease-in-out overflow-hidden ${isNodesVisible
-              ? "max-h-96 opacity-100 translate-y-0"
-              : "max-h-0 opacity-0 -translate-y-2"
-            }`}
-          style={{
-            transitionProperty: 'max-height, opacity, transform',
-            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
-          }}
-        >
-
-          <div className="px-6 py-4">
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {getFilteredNodes().map(({ label, icon: Icon, type, color }) => (
-                <DraggableNode
-                  key={type}
-                  type={type}
-                  label={label}
-                  icon={Icon}
-                  iconColor={color}
-                  compact={false}
-                />
-              ))}
-            </div>
-
-            {getFilteredNodes().length === 0 && searchTerm && (
-              <div className="text-center py-8 text-gray-500">
-                <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No nodes found for "{searchTerm}"</p>
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+            </div>
+
+            {isNodesVisible && (
+              <button
+                onClick={toggleNodesVisibility}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
+              >
+                <span className="text-xs font-medium text-gray-600">Hide </span>
+                <ChevronUp className="h-4 w-4 text-gray-500" />
+              </button>
+            )}
+
+            {!isNodesVisible && (
+              <button
+                onClick={toggleNodesVisibility}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
+              >
+                <span className="text-xs font-medium text-gray-600">Show </span>
+                <ChevronDown className="h-4 w-4 text-gray-500" />
+              </button>
             )}
           </div>
+
+          <div
+            className={`transition-all duration-100 ease-in-out overflow-hidden ${
+              isNodesVisible ? "max-h-96 opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-2"
+            }`}
+            style={{
+              transitionProperty: "max-height, opacity, transform",
+              transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
+          >
+            <div className="px-6 py-4">
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {getFilteredNodes().map(({ label, icon: Icon, type, color }) => (
+                  <DraggableNode key={type} type={type} label={label} icon={Icon} iconColor={color} compact={false} />
+                ))}
+              </div>
+
+              {getFilteredNodes().length === 0 && searchTerm && (
+                <div className="text-center py-8 text-gray-500">
+                  <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No nodes found for "{searchTerm}"</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Error notification banner */}
+      {error && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-md">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+            <span className="font-medium">{error}</span>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

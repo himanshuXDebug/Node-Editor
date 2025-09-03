@@ -4,7 +4,6 @@ import {
   Position,
   useReactFlow,
   useUpdateNodeInternals,
-  getBezierPath,
 } from 'reactflow';
 import {
   X,
@@ -12,16 +11,16 @@ import {
   Minimize2,
   ChevronRight,
   ChevronLeft,
+  PlusCircle,
+  Edit3,
   CheckCircle,
   AlertCircle,
   Clock,
-  Eye,
-  Edit3,
 } from 'lucide-react';
-;
 
 export const NodeBase = ({
   id,
+  data = {},
   title: initialTitle = 'Node',
   icon: Icon,
   inputHandles = [],
@@ -36,15 +35,22 @@ export const NodeBase = ({
   expandButtonVisible = true,
   collapsed = false,
   onCollapseToggle,
+  onCreateSubNodeData,
 }) => {
-  const { setNodes, getNodes } = useReactFlow();
-  const updateNodeInternals = useUpdateNodeInternals();
+  const { setNodes } = useReactFlow();
   const contentRef = useRef(null);
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(initialTitle);
+
+  // Refresh layout when panel or minimize toggled
+  useEffect(() => {
+    const t = setTimeout(() => updateNodeInternals(id), 260);
+    return () => clearTimeout(t);
+  }, [isPanelOpen, isMinimized, updateNodeInternals, id]);
 
   const glassColors = {
     blue: 'bg-white border-blue-300',
@@ -66,11 +72,6 @@ export const NodeBase = ({
   const getHoverBorder = hoverBorders[color] || hoverBorders.blue;
   const getTextColor = textColors[color] || textColors.blue;
 
-  useEffect(() => {
-    const t = setTimeout(() => updateNodeInternals(id), 260);
-    return () => clearTimeout(t);
-  }, [isPanelOpen, isMinimized, updateNodeInternals, id]);
-
   const StatusIcon =
     status?.type === 'error' ? AlertCircle
       : status?.type === 'success' ? CheckCircle
@@ -83,6 +84,7 @@ export const NodeBase = ({
     loading: 'text-yellow-500',
     idle: 'text-gray-400',
   };
+
   const handleDelete = () => {
     if (onDelete) return onDelete(id);
     setNodes((nodes) => nodes.filter((n) => n.id !== id));
@@ -90,7 +92,7 @@ export const NodeBase = ({
 
   const commitRename = () => {
     setEditingTitle(false);
-    setNodes((nodes) => nodes.map((n) => n.id === id ? { ...n, data: { ...n.data, title } } : n));
+    setNodes(nodes => nodes.map(n => n.id === id ? { ...n, data: { ...n.data, title } } : n));
   };
 
   const panelWidth = 320;
@@ -99,8 +101,8 @@ export const NodeBase = ({
   const renderHandle = (handle, type, index) => {
     const isInput = type === 'input';
     const handleId = typeof handle === 'string' ? handle : handle.id;
-    const handleColor = typeof handle === 'string' ? '#4f46e5' : (handle.color || '#4f46e5');
-    const offsetRight = isInput ? '-9px' : (isPanelOpen && !isMinimized ? `-${panelWidth -[-5]}px` : '-9px');
+    const handleColor = typeof handle === 'string' ? '#3b82f6' : (handle.color || '#3b82f6');
+    const offsetRight = isInput ? '-9px' : (isPanelOpen && !isMinimized ? `-${panelWidth - 5}px` : '-9px');
     const topPosition = isMinimized ? '22%' : '50%';
 
     return (
@@ -123,7 +125,7 @@ export const NodeBase = ({
             height: handleRadii,
             backgroundColor: handleColor,
             border: '3px solid white',
-            borderRadius: 9999,
+            borderRadius: '9999px',
             boxShadow: `0 0 0 2px ${handleColor}`,
             zIndex: 50,
           }}
@@ -143,12 +145,12 @@ export const NodeBase = ({
         minWidth: isMinimized ? 160 : 260,
         width: isMinimized ? 160 : undefined,
         overflow: 'visible',
-      
       }}
     >
       {inputHandles.map((h, i) => renderHandle(h, 'input', i))}
       {outputHandles.map((h, i) => renderHandle(h, 'output', i))}
 
+      {/* Header */}
       <div
         className={`flex items-center justify-between px-3 py-2 border-b ${getTextColor} bg-gray-50 rounded-t-xl`}
         style={{ minHeight: 48 }}
@@ -226,29 +228,18 @@ export const NodeBase = ({
           >
             <Edit3 size={14} /> Rename
           </button>
-
-          <button
-            onClick={() => console.log('Show details for node', id)}
-            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-50"
-            title="Details"
-          >
-            <Eye size={14} /> Details
-          </button>
-
           <div className="ml-auto text-xs text-gray-400">Mode: {isPanelOpen ? 'Panel' : 'Main'}</div>
         </div>
       )}
+
       {!isMinimized && !collapsed && (
-        <div ref={contentRef} className="p-3 space-y-3  bg-white">
-          {children}
-        </div>
+        <div ref={contentRef} className="p-3 space-y-3 bg-white">{children}</div>
       )}
 
       {expandPanelContent && (
         <div
           aria-hidden={!isPanelOpen}
-          className={`absolute top-2 left-[260px] z-20 bg-white
-            bord border-gray-200 rounded-xl shadow-2xl transition-all duration-300 overflow-hidden`}
+          className="absolute top-2 left-[260px] z-20 bg-white border border-gray-200 rounded-xl shadow-2xl transition-all duration-300 overflow-hidden"
           style={{
             width: isPanelOpen && !isMinimized ? panelWidth : 0,
             opacity: isPanelOpen && !isMinimized ? 1 : 0,

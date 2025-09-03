@@ -12,6 +12,7 @@ import { DownloadNode } from './nodes/downloadNode';
 import { ColorNode } from './nodes/colorPaletteNode';
 import { LowercaseNode } from './nodes/lowercaseNode';
 import { CustomEdge } from './components/CustomEdge';
+// import { SubnodeEdge } from './nodes/SubnodeEdge';
 import 'reactflow/dist/style.css';
 
 const nodeTypes = {
@@ -23,7 +24,7 @@ const nodeTypes = {
   Image: ImageNode,
   Download: DownloadNode,
   palette: ColorNode,
-  lowercase: LowercaseNode
+  lowercase: LowercaseNode,
 };
 
 const edgeTypes = {

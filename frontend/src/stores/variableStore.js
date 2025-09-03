@@ -1,41 +1,41 @@
-import { create } from 'zustand';
+import { create } from "zustand";
+
+let counter = 0;
 
 export const useVariableStore = create((set, get) => ({
-  variables: {},
-  colors: {},
+  variables: {}, // { variableName: value }
 
-  setVariable: (key, value) =>
+  // Create a variable for new InputNode
+  registerVariable: (nodeId) => {
+    const variableName = `input_${counter++}`;
     set((state) => ({
       variables: {
         ...state.variables,
-        [key]: value,
+        [variableName]: "",
       },
-    })),
-
-  removeVariable: (key) =>
-    set((state) => {
-      const newVars = { ...state.variables };
-      delete newVars[key];
-
-      const newColors = { ...state.colors };
-      delete newColors[key];
-
-      return {
-        variables: newVars,
-        colors: newColors,
-      };
-    }),
-
-  setColor: (key, color) =>
-    set((state) => ({
-      colors: {
-        ...state.colors,
-        [key]: color,
-      },
-    })),
-
-  getColor: (key) => {
-    const colors = get().colors || {};
-    return colors[key] || '';
+    }));
+    return variableName;
   },
+
+  // Update variable value
+  setVariable: (name, value) => {
+    set((state) => ({
+      variables: {
+        ...state.variables,
+        [name]: value,
+      },
+    }));
+  },
+
+  // Delete variable when node is removed
+  removeVariable: (name) => {
+    set((state) => {
+      const updated = { ...state.variables };
+      delete updated[name];
+      return { variables: updated };
+    });
+  },
+
+  // Get variable value
+  getVariable: (name) => get().variables[name],
 }));
