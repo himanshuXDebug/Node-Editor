@@ -1,88 +1,170 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { LogOut, Copy, Download, Eye, EyeOff } from 'lucide-react';
 import { NodeBase } from '../components/NodeBase';
-import { Download, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useStore } from '../store';
 
-export const OutputNode = ({ id, data }) => {
-  const [type, setType] = useState('Text');
-  const [output, setOutput] = useState('');
-  const [format, setFormat] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(false);
+export const OutputNode = ({ id, data, selected }) => {
+  const [outputValue, setOutputValue] = useState('Waiting for input...');
+  const [variableName, setVariableName] = useState(data?.variableName || `output_${id.split('-')[1]}`);
+  const [displayMode, setDisplayMode] = useState('full');
+  
+  const updateNodeData = useStore(state => state.updateNodeData);
+
+  // Force update when data changes (fixes "one step behind" issue)
+  useEffect(() => {
+    const newValue = data?.value || data?.output || 'Waiting for input...';
+    if (newValue !== outputValue) {
+      setOutputValue(newValue);
+    }
+  }, [data?.value, data?.output]);
+
+  // Update store
+  useEffect(() => {
+    updateNodeData(id, {
+      value: outputValue,
+      variableName,
+      displayMode,
+      lastUpdated: new Date().toISOString()
+    });
+  }, [id, outputValue, variableName, displayMode, updateNodeData]);
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(outputValue);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  };
+
+  const downloadAsFile = () => {
+    const blob = new Blob([outputValue], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${variableName}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Right panel content
+  const expandPanelContent = (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Display Mode
+        </label>
+        <select
+          value={displayMode}
+          onChange={(e) => setDisplayMode(e.target.value)}
+          className="w-full px-2 py-1 border border-gray-300 rounded nodrag"
+        >
+          <option value="full">Full Output</option>
+          <option value="preview">Preview (100 chars)</option>
+          <option value="hidden">Hidden</option>
+        </select>
+      </div>
+
+      <hr className="border-gray-200" />
+
+      <div className="text-xs text-gray-600 space-y-2">
+        <div><strong>Node ID:</strong> <code className="bg-gray-100 px-1 rounded ml-1">{id}</code></div>
+        <div><strong>Length:</strong> {outputValue.length} characters</div>
+        <div><strong>Lines:</strong> {outputValue.split('\n').length}</div>
+      </div>
+
+      <hr className="border-gray-200" />
+
+      <div className="space-y-2">
+        <button
+          onClick={copyToClipboard}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors nodrag"
+        >
+          <Copy className="w-4 h-4" />
+          Copy to Clipboard
+        </button>
+        
+        <button
+          onClick={downloadAsFile}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm bg-green-50 hover:bg-green-100 border border-green-200 rounded transition-colors nodrag"
+        >
+          <Download className="w-4 h-4" />
+          Download as File
+        </button>
+      </div>
+    </div>
+  );
+
+  const getDisplayValue = () => {
+    if (displayMode === 'hidden') return '[Output Hidden]';
+    if (displayMode === 'preview' && outputValue.length > 100) {
+      return outputValue.substring(0, 100) + '...';
+    }
+    return outputValue;
+  };
 
   return (
     <NodeBase
       id={id}
-      title="Output"
-      icon={Download}
-      inputHandles={['input']}
+      data={data}
+      title={data?.title || 'Output'}
+      icon={LogOut}
+      inputHandles={[{ id: 'input', color: '#0ea5e9' }]}
       outputHandles={[]}
       color="blue"
+      status={
+        outputValue === 'Waiting for input...' 
+          ? { type: 'idle', text: 'Waiting' }
+          : { type: 'success', text: `${outputValue.length} chars` }
+      }
+      expandPanelContent={expandPanelContent}
+      className={selected ? 'ring-2 ring-blue-400' : ''}
     >
-      <div className="relative flex">
-        {/* Main content */}
-        <div className="flex-1">
-          <div className="text-xs text-gray-500 mb-2">
-            Output data of different types from your workflow.
-          </div>
-
-          {/* Node ID */}
-          <div className="bg-gray-100 text-xs px-2 py-1 rounded font-mono mb-2">
-            {id}
-          </div>
-
-          {/* Type */}
-          <div className="mb-2">
-            <label className="text-xs font-medium text-gray-600">Type</label>
-            <select
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              <option>Text</option>
-              <option>JSON</option>
-              <option>Number</option>
-            </select>
-          </div>
-
-          {/* Output */}
-          <div className="mb-2">
-            <label className="text-xs font-medium text-gray-600">Output*</label>
-            <input
-              className="w-full border border-red-300 rounded px-2 py-1 text-sm"
-              placeholder='Type "{{" to utilize variables'
-              value={output}
-              onChange={(e) => setOutput(e.target.value)}
-            />
-          </div>
-
-          {/* Format toggle */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-600">Format output</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={format}
-                onChange={() => setFormat(!format)}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></div>
-            </label>
+      {/* Main Content */}
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Final Output
+          </label>
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 min-h-[80px] max-h-[150px] overflow-y-auto">
+            <pre className="text-sm font-mono whitespace-pre-wrap text-gray-800">
+              {getDisplayValue()}
+            </pre>
           </div>
         </div>
 
-        <button
-          onClick={() => setPanelOpen(!panelOpen)}
-          className="absolute top-2 -right-3 bg-white border rounded-full shadow p-0.5 hover:bg-gray-100"
-        >
-          {panelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">
+            Variable Name
+          </label>
+          <input
+            type="text"
+            value={variableName}
+            onChange={(e) => setVariableName(e.target.value)}
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 nodrag"
+            placeholder="output_variable"
+          />
+        </div>
 
-        {panelOpen && (
-          <div className="absolute top-0 left-full ml-2 w-40 bg-white border rounded-lg shadow-lg p-2 text-xs">
-            <p className="font-medium text-gray-700 mb-1">Right Panel</p>
-            <p className="text-gray-500">Extra options, logs, or settings can go here.</p>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <button
+            onClick={copyToClipboard}
+            className="flex-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors nodrag"
+          >
+            Copy
+          </button>
+          <button
+            onClick={downloadAsFile}
+            disabled={outputValue === 'Waiting for input...'}
+            className="flex-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded transition-colors nodrag"
+          >
+            Download
+          </button>
+        </div>
       </div>
     </NodeBase>
   );
 };
+
+export default OutputNode;

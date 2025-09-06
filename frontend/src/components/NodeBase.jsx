@@ -95,14 +95,23 @@ export const NodeBase = ({
     setNodes(nodes => nodes.map(n => n.id === id ? { ...n, data: { ...n.data, title } } : n));
   };
 
-  const panelWidth = 320;
-  const handleRadii = 18;
+  const panelWidth = 280;
+  const handleRadii = 12;
 
   const renderHandle = (handle, type, index) => {
     const isInput = type === 'input';
     const handleId = typeof handle === 'string' ? handle : handle.id;
     const handleColor = typeof handle === 'string' ? '#3b82f6' : (handle.color || '#3b82f6');
-    const offsetRight = isInput ? '-9px' : (isPanelOpen && !isMinimized ? `-${panelWidth - 5}px` : '-9px');
+    
+    // Fix: Output handles move to right panel when panel is open
+    let offsetPosition;
+    if (isInput) {
+      offsetPosition = '-6px'; // Input handles stay on main node
+    } else {
+      // Output handles move to right panel edge when panel is open
+      offsetPosition = isPanelOpen && !isMinimized ? `-${panelWidth + 6}px` : '-6px';
+    }
+    
     const topPosition = isMinimized ? '22%' : '50%';
 
     return (
@@ -112,7 +121,7 @@ export const NodeBase = ({
         style={{
           top: isInput ? '50%' : topPosition,
           transform: 'translateY(-50%)',
-          [isInput ? 'left' : 'right']: offsetRight,
+          [isInput ? 'left' : 'right']: offsetPosition,
           zIndex: 40,
         }}
       >
@@ -124,9 +133,9 @@ export const NodeBase = ({
             width: handleRadii,
             height: handleRadii,
             backgroundColor: handleColor,
-            border: '3px solid white',
-            borderRadius: '9999px',
-            boxShadow: `0 0 0 2px ${handleColor}`,
+            border: '2px solid white',
+            borderRadius: '50%',
+            boxShadow: `0 0 0 1px ${handleColor}`,
             zIndex: 50,
           }}
         />
@@ -135,125 +144,127 @@ export const NodeBase = ({
   };
 
   return (
-    <div
-      className={`
-        relative group rounded-md border border-blue-400 transition-all duration-300
-        shadow-sm hover:shadow-lg backdrop-blur-sm
-        ${getColor} ${getHoverBorder} ${className}
-      `}
-      style={{
-        minWidth: isMinimized ? 160 : 260,
-        width: isMinimized ? 160 : undefined,
-        overflow: 'visible',
-      }}
-    >
-      {inputHandles.map((h, i) => renderHandle(h, 'input', i))}
-      {outputHandles.map((h, i) => renderHandle(h, 'output', i))}
-
-      {/* Header */}
+    <div className="relative">
+      {/* Main Node Container */}
       <div
-        className={`flex items-center justify-between px-3 py-2 border-b ${getTextColor} bg-gray-50 rounded-t-xl`}
-        style={{ minHeight: 48 }}
+        className={`
+          group rounded-lg border-2 transition-all duration-300
+          shadow-sm hover:shadow-lg backdrop-blur-sm
+          ${getColor} ${getHoverBorder} ${className}
+        `}
+        style={{
+          minWidth: isMinimized ? 160 : 260,
+          width: isMinimized ? 160 : undefined,
+          overflow: 'visible',
+        }}
       >
-        <div className="flex items-center gap-2 font-medium text-sm">
-          {Icon && <Icon className="w-4 h-4" />}
-          {editingTitle ? (
-            <input
-              autoFocus
-              className="text-sm px-1 py-0.5 border rounded w-32"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(e) => e.key === 'Enter' && commitRename()}
-            />
-          ) : (
-            <div
-              onDoubleClick={() => setEditingTitle(true)}
-              className="select-none"
-              title="Double click to rename"
-            >
-              {title}
-            </div>
-          )}
+        {inputHandles.map((h, i) => renderHandle(h, 'input', i))}
+        {outputHandles.map((h, i) => renderHandle(h, 'output', i))}
 
-          {StatusIcon && (
-            <div className="ml-2 flex items-center gap-1">
-              <StatusIcon className={`w-4 h-4 ${statusColorMap[status?.type] || ''}`} />
-              {status?.text && <span className="text-xs text-gray-500">{status.text}</span>}
-            </div>
-          )}
+        {/* Header */}
+        <div
+          className={`flex items-center justify-between px-3 py-2 border-b ${getTextColor} bg-gray-50 rounded-t-lg`}
+          style={{ minHeight: 48 }}
+        >
+          <div className="flex items-center gap-2 font-medium text-sm">
+            {Icon && <Icon className="w-4 h-4" />}
+            {editingTitle ? (
+              <input
+                autoFocus
+                className="text-sm px-1 py-0.5 border rounded w-32 nodrag"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => e.key === 'Enter' && commitRename()}
+              />
+            ) : (
+              <div
+                onDoubleClick={() => setEditingTitle(true)}
+                className="select-none cursor-pointer"
+                title="Double click to rename"
+              >
+                {title}
+              </div>
+            )}
+
+            {StatusIcon && (
+              <div className="ml-2 flex items-center gap-1">
+                <StatusIcon className={`w-4 h-4 ${statusColorMap[status?.type] || ''}`} />
+                {status?.text && <span className="text-xs text-gray-500">{status.text}</span>}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {expandButtonVisible && expandPanelContent && (
+              <button
+                onClick={() => setIsPanelOpen((s) => !s)}
+                className="hover:bg-gray-200 p-1 rounded transition-colors"
+                title={isPanelOpen ? 'Close panel' : 'Open panel'}
+              >
+                {isPanelOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setIsMinimized((s) => !s);
+                if (!isMinimized) setIsPanelOpen(false);
+                onCollapseToggle && onCollapseToggle(!isMinimized);
+              }}
+              className="hover:bg-gray-200 p-1 rounded transition-colors"
+              title={isMinimized ? 'Maximize node' : 'Minimize node'}
+            >
+              {isMinimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+            </button>
+
+            {deletable && (
+              <button
+                onClick={handleDelete}
+                className="hover:bg-red-200 text-red-500 p-1 rounded transition-colors"
+                title="Delete node"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          {expandButtonVisible && expandPanelContent && (
-            <button
-              onClick={() => setIsPanelOpen((s) => !s)}
-              className="hover:bg-gray-200 p-1 rounded "
-              title={isPanelOpen ? 'Close preview' : 'Open preview'}
-            >
-              {isPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-          )}
+        {!isMinimized && !collapsed && (
+          <div ref={contentRef} className="p-3 space-y-3 bg-white rounded-b-lg">{children}</div>
+        )}
 
-          <button
-            onClick={() => {
-              setIsMinimized((s) => !s);
-              if (!isMinimized) setIsPanelOpen(false);
-              onCollapseToggle && onCollapseToggle(!isMinimized);
-            }}
-            className="hover:bg-gray-200 p-1 rounded-xl "
-            title={isMinimized ? 'Maximize node' : 'Minimize node'}
-          >
-            {isMinimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
-          </button>
-
-          {deletable && (
-            <button
-              onClick={handleDelete}
-              className="hover:bg-red-200 text-red-500 p-1 rounded"
-              title="Delete node"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
+        {/* Minimized content */}
+        {isMinimized && (
+          <div className="p-2 text-center bg-white rounded-b-lg">
+            <div className="text-xs text-gray-600 truncate">{data?.variableName || 'Node'}</div>
+          </div>
+        )}
       </div>
 
-      {!isMinimized && (
-        <div className="px-3 py-2 border-b bg-white flex items-center gap-2 text-xs">
-          <button
-            onClick={() => setEditingTitle(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-50"
-            title="Rename"
-          >
-            <Edit3 size={14} /> Rename
-          </button>
-          <div className="ml-auto text-xs text-gray-400">Mode: {isPanelOpen ? 'Panel' : 'Main'}</div>
-        </div>
-      )}
-
-      {!isMinimized && !collapsed && (
-        <div ref={contentRef} className="p-3 space-y-3 bg-white">{children}</div>
-      )}
-
+      {/* Right Side Panel */}
       {expandPanelContent && (
         <div
-          aria-hidden={!isPanelOpen}
-          className="absolute top-2 left-[260px] z-20 bg-white border border-gray-200 rounded-xl shadow-2xl transition-all duration-300 overflow-hidden"
+          className={`absolute top-0 bg-white border-2 border-l-0 rounded-r-lg shadow-lg transition-all duration-300 z-10 ${
+            isPanelOpen && !isMinimized ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'
+          }`}
           style={{
-            width: isPanelOpen && !isMinimized ? panelWidth : 0,
-            opacity: isPanelOpen && !isMinimized ? 1 : 0,
-            transform: isPanelOpen && !isMinimized ? 'translateX(0)' : 'translateX(10px)',
+            left: '100%',
+            width: panelWidth,
+            minHeight: '100%',
           }}
         >
           <div className="h-full flex flex-col">
-            <div className="p-3 border-b flex items-center justify-between">
-              <div className="font-medium text-sm">Preview</div>
-              <button onClick={() => setIsPanelOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-                <ChevronRight size={16} />
+            <div className="p-3 border-b bg-gray-50 flex items-center justify-between rounded-tr-lg">
+              <div className="font-medium text-sm">Settings</div>
+              <button 
+                onClick={() => setIsPanelOpen(false)} 
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+              >
+                <X size={16} />
               </button>
             </div>
-            <div className="p-3 overflow-auto">{expandPanelContent}</div>
+            <div className="p-3 overflow-auto flex-1">{expandPanelContent}</div>
           </div>
         </div>
       )}

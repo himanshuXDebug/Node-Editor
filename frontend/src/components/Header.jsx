@@ -62,8 +62,8 @@ const nodeTabs = [
     label: "AI",
     color: "from-violet-500 to-fuchsia-600",
     nodes: [
-      { type: "llm", label: "LLM", icon: Brain, color: "text-violet-600" },
-      { type: "openai", label: "OpenAI", icon: Zap, color: "text-fuchsia-600" },
+      { type: "gemini", label: "Gemini", icon: Brain, color: "text-violet-600" },
+      { type: "Openai", label: "OpenAI", icon: Zap, color: "text-fuchsia-600" },
       { type: "anthropic", label: "Anthropic", icon: Sparkles, color: "text-purple-600" },
     ],
   },
@@ -146,7 +146,6 @@ export default function Header() {
     setIsNodesVisible(!isNodesVisible);
   };
 
-  // Helper function to check if there's a path between nodes
   const hasPath = (sourceId, targetId, edges, visited = new Set()) => {
     if (sourceId === targetId) return true;
     if (visited.has(sourceId)) return false;
@@ -163,12 +162,10 @@ export default function Header() {
     return false;
   };
 
-  // Check connectivity between input and output nodes
   const checkNodeConnectivity = (nodes, edges) => {
     const inputNodes = nodes.filter(n => n.type === 'customInput');
     const outputNodes = nodes.filter(n => n.type === 'customOutput');
     
-    // Simple path checking - can be enhanced
     for (const inputNode of inputNodes) {
       for (const outputNode of outputNodes) {
         if (hasPath(inputNode.id, outputNode.id, edges)) {
@@ -179,7 +176,6 @@ export default function Header() {
     return false;
   };
 
-  // const validateGraph = () => {
   //   const hasInput = nodes.some(n => n.type === 'customInput');
   //   const hasLLM = nodes.some(n => n.type === 'llm');
   //   const hasOutput = nodes.some(n => n.type === 'customOutput');
@@ -207,9 +203,7 @@ export default function Header() {
   // };
 
   const onRunClick = () => {
-  // if (!validateGraph()) {
-  //   return;
-  // }
+
   setError("");
   openPanel(); 
 };

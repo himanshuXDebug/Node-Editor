@@ -17,7 +17,7 @@ const toast = {
 const availableNodes = [
   "customInput",
   "customOutput",
-  "llm",
+  "gemini",
   "text",
   "uppercase",
   "lowercase",
@@ -29,7 +29,7 @@ const availableNodes = [
   "transform",
   "knowledge",
   "document",
-  "openai",
+  "Openai",
   "anthropic",
   "aws",
   "google",

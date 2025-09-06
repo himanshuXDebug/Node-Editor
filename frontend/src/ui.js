@@ -3,7 +3,7 @@ import ReactFlow, { Controls, Background, MiniMap, MarkerType, useReactFlow } fr
 import { useStore } from './store';
 import { shallow } from 'zustand/shallow';
 import { InputNode } from './nodes/inputNode';
-import { LLMNode } from './nodes/llmNode';
+import { GeminiLLMNode } from './nodes/GeminiNode';
 import { OutputNode } from './nodes/outputNode';
 import { TextNode } from './nodes/textNode';
 import { UppercaseNode } from './nodes/upperNode';
@@ -14,10 +14,11 @@ import { LowercaseNode } from './nodes/lowercaseNode';
 import { CustomEdge } from './components/CustomEdge';
 // import { SubnodeEdge } from './nodes/SubnodeEdge';
 import 'reactflow/dist/style.css';
+import ConditionNode from './nodes/conditionNode';
 
 const nodeTypes = {
   customInput: InputNode,
-  llm: LLMNode,
+  gemini: GeminiLLMNode,
   customOutput: OutputNode,
   text: TextNode,
   uppercase: UppercaseNode,
@@ -25,6 +26,7 @@ const nodeTypes = {
   Download: DownloadNode,
   palette: ColorNode,
   lowercase: LowercaseNode,
+  condition:ConditionNode
 };
 
 const edgeTypes = {
