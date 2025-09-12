@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Shield} from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { NodeBase } from '../components/NodeBase';
 import { useStore } from '../store';
+import { useVariableStore } from '../stores/variableStore';
 
 export const ConditionNode = ({ id, data, selected }) => {
   const [instructions, setInstructions] = useState(data?.instructions || '');
-  const [variableName, setVariableName] = useState(data?.variableName || `guidelines_${id.split('-')[1]}`);
+  const [variableName, setVariableName] = useState(data?.variableName || `con`);
   const [conditionType, setConditionType] = useState(data?.conditionType || 'content_filter');
   const [priority, setPriority] = useState(data?.priority || 'medium');
   const [isActive, setIsActive] = useState(data?.isActive !== false);
 
-  const updateNodeData = useStore(state => state.updateNodeData);
+  const { updateNodeData } = useStore();
+  const { setVariable, getAllVariables, debugVariables } = useVariableStore();
 
   useEffect(() => {
+    console.log('🟡 ConditionNode useEffect triggered');
+    
     updateNodeData(id, {
       instructions,
       variableName,
@@ -21,11 +25,21 @@ export const ConditionNode = ({ id, data, selected }) => {
       isActive,
       lastUpdated: new Date().toISOString()
     });
-  }, [id, instructions, variableName, conditionType, priority, isActive, updateNodeData]);
+
+    if (isActive && instructions && variableName) {
+      setVariable(variableName, instructions);
+      console.log('🟢 ConditionNode SET VARIABLE:', variableName, '=', instructions);
+    } else if (variableName) {
+      setVariable(variableName, '');
+      console.log('🔴 ConditionNode CLEARED VARIABLE:', variableName);
+    }
+    
+    setTimeout(() => debugVariables(), 100);
+    
+  }, [instructions, variableName, conditionType, priority, isActive]);
 
   const expandPanelContent = (
     <div className="space-y-4">
-      {/* Type and Priority - Side by Side */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
@@ -57,7 +71,6 @@ export const ConditionNode = ({ id, data, selected }) => {
         </div>
       </div>
 
-      {/* Guidelines - Full Width */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Guidelines & Instructions</label>
         <textarea
@@ -69,7 +82,6 @@ export const ConditionNode = ({ id, data, selected }) => {
         />
       </div>
 
-      {/* Variable Name and Toggle */}
       <div className="grid grid-cols-3 gap-3 items-end">
         <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">Variable Name</label>
@@ -77,7 +89,7 @@ export const ConditionNode = ({ id, data, selected }) => {
             type="text"
             value={variableName}
             onChange={(e) => setVariableName(e.target.value)}
-            placeholder="guidelines"
+            placeholder="con"
             className="w-full px-2 py-1 border border-gray-300 rounded text-sm nodrag"
           />
         </div>
@@ -99,22 +111,22 @@ export const ConditionNode = ({ id, data, selected }) => {
         <label className="block text-sm font-medium text-gray-700 mb-2">Quick Templates</label>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <button
-            onClick={() => setInstructions("Don't include negative aspects or controversial topics")}
+            onClick={() => setInstructions("Be friendly and avoid negative topics")}
             className="p-2 bg-white rounded border hover:bg-blue-50 nodrag text-left"
           >
-             Positive Only
+            Positive Only
           </button>
           <button
             onClick={() => setInstructions("Use simple, clear language for beginners")}
             className="p-2 bg-white rounded border hover:bg-blue-50 nodrag text-left"
           >
-             Beginner-Friendly
+            Beginner-Friendly
           </button>
           <button
             onClick={() => setInstructions("Provide factual, educational content without opinions")}
             className="p-2 bg-white rounded border hover:bg-blue-50 nodrag text-left"
           >
-             Educational
+            Educational
           </button>
           <button
             onClick={() => setInstructions("Format as structured bullet points with headers")}
@@ -131,11 +143,11 @@ export const ConditionNode = ({ id, data, selected }) => {
     if (!instructions) return 'No guidelines set';
     
     const typeIcons = {
-      content_filter: '🛡️',
-      tone_guide: '🎭', 
-      format_rules: '📋',
-      safety_check: '⚠️',
-      quality_control: '✅'
+      content_filter: '',
+      tone_guide: '', 
+      format_rules: '',
+      safety_check: '',
+      quality_control: ''
     };
     
     return `${typeIcons[conditionType]} ${instructions.substring(0, 40)}${instructions.length > 40 ? '...' : ''}`;
@@ -171,10 +183,7 @@ export const ConditionNode = ({ id, data, selected }) => {
       }}
       expandPanelContent={expandPanelContent}
       className={selected ? 'ring-2 ring-yellow-400' : ''}
-      // Override the panel width in NodeBase
-      style={{ 
-        '--panel-width': '380px' // Wider panel
-      }}
+      style={{ '--panel-width': '400px' }}
     >
       <div className="space-y-3">
         {/* Header with Status */}
@@ -188,14 +197,12 @@ export const ConditionNode = ({ id, data, selected }) => {
           {getPriorityBadge()}
         </div>
 
-        {/* Guidelines Preview */}
         <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
           <div className="text-xs text-yellow-700 font-mono leading-relaxed">
             {getConditionPreview()}
           </div>
         </div>
 
-        {/* Quick Controls */}
         <div className="space-y-2">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Instructions</label>
@@ -203,7 +210,7 @@ export const ConditionNode = ({ id, data, selected }) => {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               rows={2}
-              placeholder="e.g., don't include political party names"
+              placeholder="e.g., For each and every reply must start with 'Himanshu' with respect"
               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 nodrag resize-none"
             />
           </div>
@@ -216,7 +223,7 @@ export const ConditionNode = ({ id, data, selected }) => {
                 value={variableName}
                 onChange={(e) => setVariableName(e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 nodrag"
-                placeholder="guidelines"
+                placeholder="con"
               />
             </div>
             <div className="flex items-end">
