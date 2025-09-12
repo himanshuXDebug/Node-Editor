@@ -1,35 +1,182 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRunPanelStore } from '../stores/useRunPanelStore';
 import { useStore } from '../store';
-import { Send, MessageSquare, AlertCircle, CheckCircle, Clock, Zap } from 'lucide-react';
+import { useVariableStore } from '../stores/variableStore';
+import { 
+  Send, MessageSquare, XCircle, Loader2, Copy, Check, RotateCcw, X
+} from 'lucide-react';
 
 export const RunPanel = () => {
   const { isOpen, closePanel } = useRunPanelStore();
-  const nodes = useStore(state => state.nodes);
-  const edges = useStore(state => state.edges);
-  const validateWorkflow = useStore(state => state.validateWorkflow);
-  const executeWorkflow = useStore(state => state.executeWorkflow);
+  const { nodes, edges, updateNodeData } = useStore();
+  const { setVariable, getVariable, getAllVariables, variables, clearAllVariables } = useVariableStore();
 
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentValidation, setCurrentValidation] = useState({ valid: false, message: '' });
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll chat to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const validateWorkflow = useCallback(() => {
+    if (nodes.length === 0) {
+      return { valid: false, message: 'No nodes in workflow' };
+    }
 
-  // Validate workflow when panel opens or nodes/edges change
-  useEffect(() => {
-    if (!isOpen) return;
+    const inputNodes = nodes.filter(n => ['inputNode', 'customInput', 'input'].includes(n.type));
+    const geminiNodes = nodes.filter(n => ['geminiLLMNode', 'gemini'].includes(n.type));
+    const outputNodes = nodes.filter(n => ['outputNode', 'customOutput', 'output'].includes(n.type));
+
+    if (inputNodes.length === 0) return { valid: false, message: 'Add Input node' };
+    if (geminiNodes.length === 0) return { valid: false, message: 'Add Gemini node' };
+    if (outputNodes.length === 0) return { valid: false, message: 'Add Output node' };
+    if (edges.length === 0) return { valid: false, message: 'Connect nodes' };
+
+    const connectedNodes = new Set();
+    edges.forEach(edge => {
+      connectedNodes.add(edge.source);
+      connectedNodes.add(edge.target);
+    });
+    
+    const disconnectedInputs = inputNodes.filter(node => !connectedNodes.has(node.id));
+    const disconnectedOutputs = outputNodes.filter(node => !connectedNodes.has(node.id));
+    
+    if (disconnectedInputs.length > 0) return { valid: false, message: 'Connect Input node' };
+    if (disconnectedOutputs.length > 0) return { valid: false, message: 'Connect Output node' };
+
+    return { valid: true, message: 'Ready' };
+  }, [nodes, edges]);
+
+  const getValidConnections = useCallback(() => {
+    const validEdges = edges.filter(edge => {
+      const sourceExists = nodes.some(n => n.id === edge.source);
+      const targetExists = nodes.some(n => n.id === edge.target);
+      return sourceExists && targetExists;
+    });
+    return validEdges.length;
+  }, [edges, nodes]);
+
+  const executeWorkflow = useCallback(async (userInput) => {
     const validation = validateWorkflow();
-    setCurrentValidation(validation);
-  }, [isOpen, nodes, edges, validateWorkflow]);
+    if (!validation.valid) {
+      throw new Error(validation.message);
+    }
 
-  // Send message and execute workflow
-  const onSendMessage = async () => {
+    const executionOrder = [
+      ...nodes.filter(n => ['inputNode', 'customInput', 'input'].includes(n.type)),
+      ...nodes.filter(n => ['conditionNode', 'condition'].includes(n.type) && n.data?.isActive !== false),
+      ...nodes.filter(n => ['geminiLLMNode', 'gemini'].includes(n.type)),
+      ...nodes.filter(n => ['text', 'textNode', 'TextNode'].includes(n.type) && n.data?.isActive !== false),
+      ...nodes.filter(n => ['outputNode', 'customOutput', 'output'].includes(n.type))
+    ];
+
+    const nodeOutputs = {};
+    let finalResponse = '';
+
+    for (const node of executionOrder) {
+      const currentNode = nodes.find(n => n.id === node.id);
+      if (!currentNode) {
+        throw new Error(`Node ${node.id} was removed`);
+      }
+
+      const upstreamInputs = edges
+        .filter(e => e.target === node.id)
+        .map(e => nodeOutputs[e.source])
+        .filter(Boolean);
+
+      let result = '';
+
+      switch (node.type) {
+        case 'inputNode':
+        case 'customInput':
+        case 'input':
+          result = userInput || node.data?.value || '';
+          if (node.data?.variableName) setVariable(node.data.variableName, result);
+          break;
+
+        case 'conditionNode':
+        case 'condition':
+          if (node.data?.isActive && node.data?.instructions) {
+            const variableName = node.data.variableName || 'con';
+            setVariable(variableName, node.data.instructions);
+            result = node.data.instructions;
+          }
+          break;
+
+        case 'geminiLLMNode':
+        case 'gemini':
+          const allVars = getAllVariables();
+          const userVar = Object.entries(allVars).find(([k, v]) => k.includes('input') && v?.trim())?.[1];
+          const conditionVar = getVariable('con');
+          
+          let prompt = userVar || upstreamInputs.join(' ') || node.data?.prompt || '';
+          if (conditionVar) prompt += `\n\nInstruction: ${conditionVar}`;
+
+          if (!prompt.trim()) throw new Error('No prompt available');
+
+          const response = await fetch("http://localhost:8000/api/gemini", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              personalApiKey: node.data?.personalAPI || null,
+              prompt,
+              model: "gemini-2.5-flash"
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `API error: ${response.status}`);
+          }
+
+          const apiResult = await response.json();
+          result = apiResult.output || 'No response';
+          if (node.data?.variableName) setVariable(node.data.variableName, result);
+          updateNodeData(node.id, { response: result });
+          break;
+
+        case 'text':
+        case 'textNode':
+          if (node.data?.isActive && upstreamInputs.length > 0) {
+            const inputText = upstreamInputs.join('\n\n');
+            result = inputText.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
+            if (node.data?.variableName) setVariable(node.data.variableName, result);
+            updateNodeData(node.id, { processedText: result });
+          } else {
+            result = upstreamInputs[0] || '';
+          }
+          break;
+
+        case 'outputNode':
+        case 'customOutput':
+        case 'output':
+          result = upstreamInputs[upstreamInputs.length - 1] || '';
+          if (!result.trim()) {
+            const outputVars = Object.entries(variables).filter(([key, value]) => 
+              (key.includes('processed') || key.includes('gemini')) && value?.trim()
+            );
+            if (outputVars.length > 0) {
+              result = outputVars[outputVars.length - 1][1];
+            }
+          }
+          if (node.data?.variableName) setVariable(node.data.variableName, result);
+          updateNodeData(node.id, { outputContent: result });
+          break;
+
+        default:
+          break;
+      }
+
+      nodeOutputs[node.id] = result;
+      if (result) finalResponse = result;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return finalResponse || 'No output generated';
+  }, [nodes, edges, variables, setVariable, getVariable, getAllVariables, updateNodeData, validateWorkflow]);
+
+  const onSendMessage = useCallback(async () => {
     if (!inputValue.trim() || isProcessing || !currentValidation.valid) return;
 
     const userMessage = { 
@@ -45,247 +192,200 @@ export const RunPanel = () => {
     setIsProcessing(true);
 
     try {
-      console.log('Sending message:', currentInput);
       const response = await executeWorkflow(currentInput);
-      
       setMessages(prev => [...prev, { 
         id: Date.now() + 1, 
         sender: 'bot', 
         text: response,
         timestamp: new Date()
       }]);
-      
     } catch (error) {
-      console.error('RunPanel error:', error);
       setMessages(prev => [...prev, { 
         id: Date.now() + 1, 
-        sender: 'system', 
-        text: `Error: ${error.message}`,
+        sender: 'error', 
+        text: error.message,
         timestamp: new Date()
       }]);
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [inputValue, isProcessing, currentValidation.valid, executeWorkflow]);
 
-  // Handle Enter key in input
-  const handleKeyDown = (e) => {
+  const copyText = useCallback(async (text, id) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(id);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (error) {
+      console.error('Copy failed:', error);
+    }
+  }, []);
+
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    clearAllVariables();
+  }, [clearAllVariables]);
+
+  const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSendMessage();
     }
-  };
+  }, [onSendMessage]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const validation = validateWorkflow();
+      setCurrentValidation(validation);
+    }
+  }, [isOpen, validateWorkflow]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex justify-center items-center p-6">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-5xl max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <header className="flex justify-between items-center border-b p-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3">
+      <div className="bg-white rounded-lg shadow-lg border w-full max-w-4xl h-[80vh] flex flex-col">
+        
+        <div className="flex items-center justify-between p-3 border-b bg-slate-100">
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-semibold">Run Panel</h2>
-            <div className="flex items-center gap-2 ml-4">
-              <div className={`w-2 h-2 rounded-full ${
-                currentValidation.valid ? 'bg-green-500' : 'bg-red-500'
-              }`}></div>
-              <span className="text-sm text-gray-600">
-                {nodes.length} nodes, {edges.length} connections
-              </span>
-            </div>
+            <MessageSquare className="w-4 h-4 text-slate-700" />
+            <h1 className="text-base font-medium text-slate-900">AI Workflow</h1>
+            <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded">
+              {nodes.length} nodes • {getValidConnections()} connections
+            </span>
           </div>
-          <button 
-            onClick={closePanel} 
-            className="text-gray-700 hover:text-gray-900 font-bold text-2xl leading-none"
-          >
-            ×
-          </button>
-        </header>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={resetChat} 
+              className="p-1 text-slate-600 hover:bg-slate-200 rounded text-xs"
+              title="Reset"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+            <button 
+              onClick={closePanel} 
+              className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
-        {/* Content */}
-        <section className="flex-1 flex flex-col overflow-hidden">
-          {/* No nodes or invalid pipeline */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          
           {!currentValidation.valid && (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-              <AlertCircle className="w-16 h-16 text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">Pipeline Not Ready</h3>
-              <p className="text-gray-500 max-w-md">{currentValidation.message}</p>
-              
-              {/* Quick setup guide */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200 max-w-md">
-                <h4 className="text-sm font-semibold text-blue-800 mb-2">Quick Setup:</h4>
-                <ol className="text-sm text-blue-700 space-y-1 text-left">
-                  <li>1. Add an Input node</li>
-                  <li>2. Add a Gemini node</li>
-                  <li>3. Add an Output node</li>
-                  <li>4. Connect them with edges</li>
-                </ol>
+            <div className="flex-1 flex items-center justify-center p-6">
+              <div className="text-center max-w-sm">
+                <XCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+                <h3 className="text-sm font-medium text-slate-900 mb-2">Setup Required</h3>
+                <p className="text-xs text-slate-600 mb-4">{currentValidation.message}</p>
+                
+                <div className="bg-slate-50 p-3 rounded text-left">
+                  <p className="text-xs font-medium mb-2 text-slate-700">Required:</p>
+                  <div className="space-y-1">
+                    {[
+                      { name: 'Input node', present: nodes.some(n => ['inputNode', 'customInput', 'input'].includes(n.type)) },
+                      { name: 'Gemini node', present: nodes.some(n => ['geminiLLMNode', 'gemini'].includes(n.type)) },
+                      { name: 'Output node', present: nodes.some(n => ['outputNode', 'customOutput', 'output'].includes(n.type)) },
+                      { name: 'Connections', present: edges.length > 0 }
+                    ].map(({ name, present }) => (
+                      <div key={name} className="flex items-center gap-2 text-xs">
+                        <div className={`w-1 h-1 rounded-full ${present ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className={present ? 'text-green-700' : 'text-red-700'}>{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Valid pipeline - show chat interface */}
           {currentValidation.valid && (
-            <div className="flex flex-1 overflow-hidden">
-              {/* Chat Area */}
-              <div className="flex-1 flex flex-col">
-                {/* Messages */}
-                <div className="flex-1 px-6 py-4 overflow-y-auto space-y-3 bg-gray-50">
-                  {messages.length === 0 && (
-                    <div className="text-center py-8">
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                      <h3 className="text-lg font-semibold text-gray-700 mb-1">Pipeline Ready!</h3>
-                      <p className="text-gray-500 mb-4">Your workflow is connected and ready to process messages.</p>
-                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 rounded-full text-sm text-green-700">
-                        <Zap className="w-3 h-3" />
-                        Start chatting below
-                      </div>
+            <>
+              <div className="flex-1 p-3 overflow-y-auto bg-slate-50">
+                {messages.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 bg-green-500 rounded-full mx-auto mb-3 flex items-center justify-center">
+                      <MessageSquare className="w-4 h-4 text-white" />
                     </div>
-                  )}
+                    <h3 className="text-sm font-medium text-slate-900 mb-1">Ready to Chat</h3>
+                    <p className="text-xs text-slate-600">Your workflow is configured.</p>
+                  </div>
+                )}
 
+                <div className="space-y-3">
                   {messages.map(({ id, sender, text, timestamp }) => (
-                    <div
-                      key={id}
-                      className={`flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-[70%] px-4 py-3 rounded-lg ${
-                          sender === 'user' 
-                            ? 'bg-blue-600 text-white' 
-                            : sender === 'system'
-                            ? 'bg-red-100 text-red-800 border border-red-200'
-                            : 'bg-white border shadow-sm'
-                        }`}
-                      >
+                    <div key={id} className={`flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`group max-w-xs px-3 py-2 rounded-lg text-sm ${
+                        sender === 'user' 
+                          ? 'bg-slate-700 text-white' 
+                          : sender === 'error'
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : 'bg-white text-slate-900 border border-slate-200'
+                      }`}>
                         <div className="whitespace-pre-wrap">{text}</div>
-                        <div className="text-xs opacity-70 mt-1">
-                          {timestamp.toLocaleTimeString()}
+                        <div className="flex items-center justify-between mt-2 text-xs opacity-70">
+                          <span>{timestamp.toLocaleTimeString()}</span>
+                          {sender !== 'user' && (
+                            <button 
+                              onClick={() => copyText(text, id)} 
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {copiedMessageId === id ? 
+                                <Check className="w-3 h-3 text-green-600" /> : 
+                                <Copy className="w-3 h-3" />
+                              }
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
+                </div>
 
-                  {isProcessing && (
-                    <div className="flex justify-start">
-                      <div className="bg-white border px-4 py-3 rounded-lg flex items-center gap-2 shadow-sm">
-                        <Clock className="w-4 h-4 animate-spin text-blue-600" />
-                        <span className="text-gray-600">Processing through pipeline...</span>
-                      </div>
+                {isProcessing && (
+                  <div className="flex justify-start mt-3">
+                    <div className="bg-white border px-3 py-2 rounded-lg flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin text-slate-600" />
+                      <span className="text-xs text-slate-600">Processing...</span>
                     </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Input Area */}
-                <div className="border-t p-4 bg-white">
-                  <div className="flex gap-3 items-end">
-                    <textarea
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Type your message... (Press Enter to send)"
-                      disabled={isProcessing}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none nodrag"
-                      rows={inputValue.split('\n').length || 1}
-                      style={{ minHeight: '40px', maxHeight: '120px' }}
-                    />
-                    <button
-                      onClick={onSendMessage}
-                      disabled={!inputValue.trim() || isProcessing}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                    >
-                      <Send className="w-4 h-4" />
-                      Send
-                    </button>
                   </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="border-t p-3 bg-white">
+                <div className="flex gap-2">
+                  <textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type message..."
+                    disabled={isProcessing}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-slate-500 resize-none disabled:opacity-50"
+                    rows={1}
+                    style={{ minHeight: '36px', maxHeight: '72px' }}
+                  />
+                  <button
+                    onClick={onSendMessage}
+                    disabled={!inputValue.trim() || isProcessing || !currentValidation.valid}
+                    className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                  >
+                    <Send className="w-3 h-3" />
+                    Send
+                  </button>
                 </div>
               </div>
-
-              {/* Execution Status Sidebar */}
-              <div className="w-72 border-l bg-gray-50 p-4">
-                <h3 className="font-semibold mb-4 text-gray-800">Execution Status</h3>
-                <ExecutionStatusPanel nodes={nodes} />
-              </div>
-            </div>
+            </>
           )}
-        </section>
+        </div>
       </div>
-    </div>
-  );
-};
-
-// Component to show node execution status
-const ExecutionStatusPanel = ({ nodes }) => {
-  const relevantNodes = nodes.filter(n => 
-    ['customInput', 'gemini', 'customOutput'].includes(n.type)
-  );
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'processing': return <Clock className="w-4 h-4 text-blue-500 animate-spin" />;
-      case 'success': return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'error': return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default: return <div className="w-4 h-4 rounded-full bg-gray-300" />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'processing': return 'text-blue-700 bg-blue-50 border-blue-200';
-      case 'success': return 'text-green-700 bg-green-50 border-green-200';
-      case 'error': return 'text-red-700 bg-red-50 border-red-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      {relevantNodes.map(node => (
-        <div 
-          key={node.id} 
-          className={`p-3 rounded border ${getStatusColor(node.data?.status)}`}
-        >
-          <div className="flex items-center gap-3 mb-2">
-            {getStatusIcon(node.data?.status)}
-            <div className="flex-1">
-              <div className="font-medium text-sm">
-                {node.data?.title || node.type}
-              </div>
-              <div className="text-xs opacity-70">
-                {node.id}
-              </div>
-            </div>
-          </div>
-          
-          {node.data?.value && (
-            <div className="text-xs mt-2 p-2 bg-white bg-opacity-50 rounded">
-              <strong>Value:</strong> {node.data.value.substring(0, 50)}
-              {node.data.value.length > 50 && '...'}
-            </div>
-          )}
-          
-          {node.data?.output && node.data.output !== node.data?.value && (
-            <div className="text-xs mt-2 p-2 bg-white bg-opacity-50 rounded">
-              <strong>Output:</strong> {node.data.output.substring(0, 50)}
-              {node.data.output.length > 50 && '...'}
-            </div>
-          )}
-          
-          {node.data?.lastUpdated && (
-            <div className="text-xs mt-1 opacity-70">
-              Updated: {new Date(node.data.lastUpdated).toLocaleTimeString()}
-            </div>
-          )}
-        </div>
-      ))}
-      
-      {relevantNodes.length === 0 && (
-        <div className="text-center text-gray-500 text-sm py-8">
-          No workflow nodes detected
-        </div>
-      )}
     </div>
   );
 };
