@@ -1,5 +1,3 @@
-// store.js - Simplified version without problematic retry logic
-
 import { create } from "zustand";
 import {
   addEdge,
@@ -11,10 +9,73 @@ import AsyncQueue from './utils/AsyncQueue';
 
 const requestQueue = new AsyncQueue(1);
 
+// **ADDED: Variable counter and management**
+let variableCounter = 0;
+
 export const useStore = create((set, get) => ({
   nodes: [],
   edges: [],
   nodeIDs: {},
+  
+  // **ADDED: Variable store integration**
+  variables: {}, // { variableName: value }
+
+  // **ADDED: Variable management methods**
+  registerVariable: (nodeId, prefix = 'var') => {
+    const variableName = `${prefix}_${variableCounter++}`;
+    set((state) => ({
+      variables: {
+        ...state.variables,
+        [variableName]: "",
+      },
+    }));
+    console.log(`[Store] Registered variable: ${variableName} for node: ${nodeId}`);
+    return variableName;
+  },
+
+  setVariable: (name, value) => {
+    set((state) => ({
+      variables: {
+        ...state.variables,
+        [name]: value,
+      },
+    }));
+    console.log(`[Store] Set variable ${name}:`, value);
+  },
+
+  removeVariable: (name) => {
+    set((state) => {
+      const updated = { ...state.variables };
+      delete updated[name];
+      return { variables: updated };
+    });
+    console.log(`[Store] Removed variable: ${name}`);
+  },
+
+  getVariable: (name) => {
+    const value = get().variables[name];
+    return value;
+  },
+
+  getAllVariables: () => get().variables,
+
+  clearAllVariables: () => {
+    set({ variables: {} });
+    console.log('[Store] Cleared all variables');
+  },
+
+  // **ADDED: Template interpolation**
+  interpolateVariables: (text) => {
+    const variables = get().variables;
+    let result = text;
+    
+    Object.entries(variables).forEach(([name, value]) => {
+      const placeholder = `{{${name}}}`;
+      result = result.replace(new RegExp(placeholder, 'g'), String(value || ''));
+    });
+    
+    return result;
+  },
   
   getNodeID: (type) => {
     const newIDs = { ...get().nodeIDs };
@@ -31,6 +92,12 @@ export const useStore = create((set, get) => ({
   },
 
   deleteNode: (id) => {
+    // **ENHANCED: Also remove variables associated with deleted node**
+    const nodeData = get().nodes.find(n => n.id === id)?.data;
+    if (nodeData?.variableName) {
+      get().removeVariable(nodeData.variableName);
+    }
+    
     set({
       nodes: get().nodes.filter((node) => node.id !== id),
       edges: get().edges.filter(
@@ -98,7 +165,7 @@ export const useStore = create((set, get) => ({
   },
 
   clearWorkflow: () => {
-    set({ nodes: [], edges: [], nodeIDs: {} });
+    set({ nodes: [], edges: [], nodeIDs: {}, variables: {} }); // **ENHANCED: Also clear variables**
   },
 
   validateWorkflow: () => {
@@ -126,7 +193,7 @@ export const useStore = create((set, get) => ({
     return { valid: true, message: "Pipeline is ready!" };
   },
 
-  // Simplified execution without problematic retry logic
+  // **ENHANCED: Execution with variable interpolation**
   executeWorkflow: async (userInput) => {
     return requestQueue.add(async () => {
       const { nodes, edges } = get();
@@ -134,7 +201,20 @@ export const useStore = create((set, get) => ({
       try {
         console.log('=== EXECUTING WORKFLOW ===');
         console.log('User Input:', userInput);
+        console.log('Available Variables:', get().variables);
         
+        // Clear output values before new execution
+        set(state => ({
+          nodes: state.nodes.map(n => ({ 
+            ...n, 
+            data: { 
+              ...n.data, 
+              output: undefined,
+              status: 'idle' 
+            }
+          }))
+        }));
+
         // Find input nodes
         const inputNodes = nodes.filter(n => n.type === 'customInput');
         if (inputNodes.length === 0) {
@@ -176,13 +256,22 @@ export const useStore = create((set, get) => ({
 
       } catch (error) {
         console.error('Workflow execution failed:', error);
+        
+        // Set error status on all nodes
+        set(state => ({
+          nodes: state.nodes.map(n => ({ 
+            ...n, 
+            data: { ...n.data, status: 'error' }
+          }))
+        }));
+        
         throw error;
       }
     });
   },
 }));
 
-// Simplified execution without retry loop
+// **ENHANCED: Execution with variable support**
 async function traverseAndExecute(nodeId, inputData, nodes, edges, get, set, visited = new Set()) {
   if (visited.has(nodeId)) {
     return inputData;
@@ -213,8 +302,11 @@ async function traverseAndExecute(nodeId, inputData, nodes, edges, get, set, vis
         break;
         
       case 'gemini':
-        // Simple, single API call with unique prompt
-        processedData = await executeGeminiNodeSimple(currentNode, inputData);
+        processedData = await executeGeminiNodeWithVariables(currentNode, inputData, get);
+        break;
+        
+      case 'condition':
+        processedData = executeConditionNode(currentNode, inputData, get);
         break;
         
       case 'customOutput':
@@ -224,6 +316,11 @@ async function traverseAndExecute(nodeId, inputData, nodes, edges, get, set, vis
       default:
         console.warn(`Unknown node type: ${currentNode.type}`);
         processedData = inputData;
+    }
+
+    // **ENHANCED: Store node output as variable if variableName exists**
+    if (currentNode.data?.variableName && processedData) {
+      get().setVariable(currentNode.data.variableName, processedData);
     }
 
     set(state => ({
@@ -269,19 +366,32 @@ async function traverseAndExecute(nodeId, inputData, nodes, edges, get, set, vis
   return finalResult;
 }
 
-// Simple Gemini execution without retry loops
-async function executeGeminiNodeSimple(node, inputData) {
+// **ENHANCED: Gemini execution with variable interpolation**
+async function executeGeminiNodeWithVariables(node, inputData, get) {
   const personalApiKey = node.data?.personalAPI?.trim();
+  let prompt = node.data?.prompt || inputData;
+  
+  // **INTERPOLATE VARIABLES IN PROMPT**
+  prompt = get().interpolateVariables(prompt);
+  
+  // Apply conditions if enabled
+  if (node.data?.useConditions && node.data?.conditionGuidelines) {
+    prompt = `${prompt}
+
+Please follow these guidelines strictly:
+${node.data.conditionGuidelines}
+
+Ensure your response adheres to all guidelines while being helpful.`;
+  }
   
   const apiPayload = {
     personalApiKey: personalApiKey || null,
-    prompt: inputData,
-    // Add uniqueness to prevent caching
+    prompt: prompt,
     requestId: `${Date.now()}-${Math.random()}`,
-    inputprompt: `Please respond appropriately to this specific message: "${inputData}"`
+    model: "gemini-2.5-flash"
   };
 
-  console.log('Calling Gemini API:', inputData);
+  console.log('Calling Gemini API with interpolated prompt:', prompt);
 
   const response = await fetch('http://localhost:8000/api/gemini', {
     method: 'POST',
@@ -294,8 +404,31 @@ async function executeGeminiNodeSimple(node, inputData) {
   }
 
   const result = await response.json();
-  console.log('API Response:', result.output.substring(0, 100) + '...');
-  return result.output;
+  let output = result?.output || "No response received";
+  
+  // Clean up markdown formatting
+  output = output
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\n\s*\n/g, '\n')
+    .trim();
+
+  console.log('API Response:', output.substring(0, 100) + '...');
+  return output;
+}
+
+// **ADDED: Condition node execution**
+function executeConditionNode(node, inputData, get) {
+  const { instructions, variableName, isActive } = node.data;
+  
+  if (isActive && instructions && variableName) {
+    // Store the instructions as a variable for next nodes to use
+    get().setVariable(variableName, instructions);
+    console.log(`Condition node ${node.id} stored variable ${variableName}:`, instructions);
+  }
+
+  return inputData; // Pass through the original input unchanged
 }
 
 // Path checking helper
