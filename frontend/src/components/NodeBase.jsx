@@ -11,8 +11,6 @@ import {
   Minimize2,
   ChevronRight,
   ChevronLeft,
-  PlusCircle,
-  Edit3,
   CheckCircle,
   AlertCircle,
   Clock,
@@ -46,7 +44,6 @@ export const NodeBase = ({
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(initialTitle);
 
-  // Refresh layout when panel or minimize toggled
   useEffect(() => {
     const t = setTimeout(() => updateNodeInternals(id), 260);
     return () => clearTimeout(t);
@@ -96,19 +93,17 @@ export const NodeBase = ({
   };
 
   const panelWidth = 280;
-  const handleRadii = 12;
+  const handleRadii = 18;
 
   const renderHandle = (handle, type, index) => {
     const isInput = type === 'input';
     const handleId = typeof handle === 'string' ? handle : handle.id;
     const handleColor = typeof handle === 'string' ? '#3b82f6' : (handle.color || '#3b82f6');
     
-    // Fix: Output handles move to right panel when panel is open
     let offsetPosition;
     if (isInput) {
-      offsetPosition = '-6px'; // Input handles stay on main node
+      offsetPosition = '-6px';
     } else {
-      // Output handles move to right panel edge when panel is open
       offsetPosition = isPanelOpen && !isMinimized ? `-${panelWidth + 6}px` : '-6px';
     }
     
@@ -136,7 +131,6 @@ export const NodeBase = ({
             border: '2px solid white',
             borderRadius: '50%',
             boxShadow: `0 0 0 1px ${handleColor}`,
-            zIndex: 50,
           }}
         />
       </div>
@@ -145,7 +139,6 @@ export const NodeBase = ({
 
   return (
     <div className="relative">
-      {/* Main Node Container */}
       <div
         className={`
           group rounded-lg border-2 transition-all duration-300
@@ -154,14 +147,13 @@ export const NodeBase = ({
         `}
         style={{
           minWidth: isMinimized ? 160 : 260,
-          width: isMinimized ? 160 : undefined,
+          width: isMinimized ? 260 : undefined,
           overflow: 'visible',
         }}
       >
         {inputHandles.map((h, i) => renderHandle(h, 'input', i))}
         {outputHandles.map((h, i) => renderHandle(h, 'output', i))}
 
-        {/* Header */}
         <div
           className={`flex items-center justify-between px-3 py-2 border-b ${getTextColor} bg-gray-50 rounded-t-lg`}
           style={{ minHeight: 48 }}
@@ -234,7 +226,6 @@ export const NodeBase = ({
           <div ref={contentRef} className="p-3 space-y-3 bg-white rounded-b-lg">{children}</div>
         )}
 
-        {/* Minimized content */}
         {isMinimized && (
           <div className="p-2 text-center bg-white rounded-b-lg">
             <div className="text-xs text-gray-600 truncate">{data?.variableName || 'Node'}</div>
@@ -242,7 +233,6 @@ export const NodeBase = ({
         )}
       </div>
 
-      {/* Right Side Panel */}
       {expandPanelContent && (
         <div
           className={`absolute top-0 bg-white border-2 border-l-0 rounded-r-lg shadow-lg transition-all duration-300 z-10 ${
@@ -252,6 +242,7 @@ export const NodeBase = ({
             left: '100%',
             width: panelWidth,
             minHeight: '100%',
+            z:10,
           }}
         >
           <div className="h-full flex flex-col">
