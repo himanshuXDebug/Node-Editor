@@ -1,21 +1,20 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from collections import defaultdict, deque
 from dotenv import load_dotenv
 import google.generativeai as genai
 import os
+from typing import Optional
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 @app.get("/")
@@ -27,23 +26,18 @@ async def parse_pipeline(request: Request):
     data = await request.json()
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
-
     num_nodes = len(nodes)
     num_edges = len(edges)
-
     graph = defaultdict(list)
     indegree = defaultdict(int)
-
     for edge in edges:
         source = edge.get("source")
         target = edge.get("target")
         if source and target:
             graph[source].append(target)
             indegree[target] += 1
-
     queue = deque([node["id"] for node in nodes if indegree[node["id"]] == 0])
     visited = 0
-
     while queue:
         node = queue.popleft()
         visited += 1
@@ -51,9 +45,7 @@ async def parse_pipeline(request: Request):
             indegree[neighbor] -= 1
             if indegree[neighbor] == 0:
                 queue.append(neighbor)
-
     is_dag = visited == len(nodes)
-
     return {
         "num_nodes": num_nodes,
         "num_edges": num_edges,
@@ -62,11 +54,23 @@ async def parse_pipeline(request: Request):
 
 class PromptPayload(BaseModel):
     prompt: str
+    personalApiKey: Optional[str] = None
+    model: Optional[str] = "gemini-2.5-flash"
 
 @app.post("/api/gemini")
 async def generate_with_gemini(payload: PromptPayload):
     try:
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        if payload.personalApiKey and payload.personalApiKey.strip():
+            api_key = payload.personalApiKey.strip()
+            if len(api_key) < 30 or not api_key.startswith('AIza'):
+                raise HTTPException(status_code=400, detail={"error": {"message": "Invalid API key format. Gemini keys start with 'AIza' and are 39+ characters long."}})
+        else:
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise HTTPException(status_code=500, detail={"error": {"message": "No backend API key configured"}})
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(payload.model or "gemini-2.5-flash")
         result = model.generate_content(payload.prompt)
 
         output = getattr(result, "text", None)
@@ -74,7 +78,18 @@ async def generate_with_gemini(payload: PromptPayload):
             output = result.response.text()
         cleaned = output.strip().lstrip("Answer:").replace("*", "").replace("**", "")
         print(cleaned)
-        return {"output": cleaned or "Gemini returned no usable text."}
-    except Exception as e:
-        return {"error": str(e)}
+        return {"output": cleaned or "Gemini returned no usable text.", "apiKeySource": "personal" if payload.personalApiKey else "backend"}
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "API_KEY_INVALID" in str(e) or "invalid api key" in str(e).lower():
+            if payload.personalApiKey:
+                raise HTTPException(status_code=401, detail={"error": {"message": "Invalid personal API key. Please check your Gemini API key."}})
+            else:
+                raise HTTPException(status_code=500, detail={"error": {"message": "Backend API key error. Contact administrator."}})
+        raise HTTPException(status_code=500, detail={"error": {"message": f"Gemini API error: {str(e)}"}})
+
+@app.exception_handler(422)
+async def validation_exception_handler(request: Request, exc):
+    return {"error": {"message": "Request validation failed. Check your request data format.", "details": str(exc)}}
