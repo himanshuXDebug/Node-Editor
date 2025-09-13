@@ -1,8 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChevronRight,
-  RotateCcw,
-  RotateCw,
   Play,
   FileDown,
   Zap,
@@ -25,12 +23,20 @@ import {
   GitBranch,
   ChevronDown,
   ChevronUp,
+  Palette,
+  RotateCcw,
+  HelpCircle,
+  FileText,
+  Edit2,
+  Check,
+  X,
 } from "lucide-react";
 import { DraggableNode } from "../draggableNode";
 import { useRunPanelStore } from "../stores/useRunPanelStore";
 import { useStore } from '../store';
 import { shallow } from 'zustand/shallow';
-
+import { HowToUsePopup } from './HowToUse';
+import { ReportPopup } from './Report';
 
 const nodeTabs = [
   {
@@ -94,6 +100,7 @@ const nodeTabs = [
       { type: "Image", label: "Image", icon: Image, color: "text-blue-600" },
       { type: "Download", label: "Download", icon: Download, color: "text-green-600" },
       { type: "database", label: "Database", icon: Database, color: "text-indigo-600" },
+      { type: "palette", label: "Palette", icon: Palette, color: "text-purple-600" },
     ],
   },
   {
@@ -109,17 +116,22 @@ const nodeTabs = [
 const selector = (state) => ({
   nodes: state.nodes,
   edges: state.edges,
+  setNodes: state.setNodes,
+  setEdges: state.setEdges,
 });
 
 export default function Header() {
   const [activeTab, setActiveTab] = useState("Objects");
   const [searchTerm, setSearchTerm] = useState("");
   const [isNodesVisible, setIsNodesVisible] = useState(true);
-  const [error, setError] = useState('');
-  
- const openPanel = useRunPanelStore(state => state.openPanel);
-  
-  const { nodes, edges } = useStore(selector, shallow);
+  const [pipelineName, setPipelineName] = useState("Untitled Pipeline 1");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [showHowToUse, setShowHowToUse] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+
+  const openPanel = useRunPanelStore(state => state.openPanel);
+  const { nodes, edges, setNodes, setEdges } = useStore(selector, shallow);
 
   const getFilteredNodes = () => {
     const currentTab = nodeTabs.find((tab) => tab.label === activeTab);
@@ -142,80 +154,34 @@ export default function Header() {
     }
   };
 
-  const toggleNodesVisibility = () => {
-    setIsNodesVisible(!isNodesVisible);
+  const resetCanvas = () => {
+    if (window.confirm("Clear entire canvas? This cannot be undone.")) {
+      setNodes([]);
+      setEdges([]);
+    }
   };
 
-  const hasPath = (sourceId, targetId, edges, visited = new Set()) => {
-    if (sourceId === targetId) return true;
-    if (visited.has(sourceId)) return false;
-    
-    visited.add(sourceId);
-    
-    const outgoingEdges = edges.filter(e => e.source === sourceId);
-    for (const edge of outgoingEdges) {
-      if (hasPath(edge.target, targetId, edges, visited)) {
-        return true;
-      }
-    }
-    
-    return false;
+  const startEditingName = () => {
+    setTempName(pipelineName);
+    setIsEditingName(true);
   };
 
-  const checkNodeConnectivity = (nodes, edges) => {
-    const inputNodes = nodes.filter(n => n.type === 'customInput');
-    const outputNodes = nodes.filter(n => n.type === 'customOutput');
-    
-    for (const inputNode of inputNodes) {
-      for (const outputNode of outputNodes) {
-        if (hasPath(inputNode.id, outputNode.id, edges)) {
-          return true;
-        }
-      }
+  const savePipelineName = () => {
+    if (tempName.trim()) {
+      setPipelineName(tempName.trim());
     }
-    return false;
+    setIsEditingName(false);
   };
 
-  //   const hasInput = nodes.some(n => n.type === 'customInput');
-  //   const hasLLM = nodes.some(n => n.type === 'llm');
-  //   const hasOutput = nodes.some(n => n.type === 'customOutput');
-    
-  //   if (!hasInput) {
-  //     setError("Add an Input node to receive user messages");
-  //     return false;
-  //   }
-  //   if (!hasLLM) {
-  //     setError("Add an LLM node to process messages");
-  //     return false;
-  //   }
-  //   if (!hasOutput) {
-  //     setError("Add an Output node to send responses");
-  //     return false;
-  //   }
+  const cancelEditingName = () => {
+    setTempName("");
+    setIsEditingName(false);
+  };
 
-  //   const isConnected = checkNodeConnectivity(nodes, edges);
-  //   if (!isConnected) {
-  //     setError("Connect your nodes to create a complete workflow");
-  //     return false;
-  //   }
-
-  //   return true;
-  // };
-
-  const onRunClick = () => {
-
-  setError("");
-  openPanel(); 
-};
-
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError('');
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+  const handleNameKeyDown = (e) => {
+    if (e.key === 'Enter') savePipelineName();
+    if (e.key === 'Escape') cancelEditingName();
+  };
 
   return (
     <>
@@ -225,38 +191,72 @@ export default function Header() {
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/80 shadow-sm ring-1 ring-gray-200/50">
               <span className="font-semibold text-gray-800">Pipelines</span>
               <ChevronRight className="h-4 w-4 text-gray-400" />
-              <span className="font-bold text-gray-900">Untitled Pipeline 1</span>
+
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    onKeyDown={handleNameKeyDown}
+                    onBlur={savePipelineName}
+                    className="font-bold text-gray-900 bg-transparent border-b border-blue-500 outline-none"
+                    autoFocus
+                  />
+                  <button onClick={savePipelineName} className="p-1 hover:bg-green-100 rounded">
+                    <Check className="h-3 w-3 text-green-600" />
+                  </button>
+                  <button onClick={cancelEditingName} className="p-1 hover:bg-red-100 rounded">
+                    <X className="h-3 w-3 text-red-600" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-900">{pipelineName}</span>
+                  <button onClick={startEditingName} className="p-1 hover:bg-gray-100 rounded">
+                    <Edit2 className="h-3 w-3 text-gray-500" />
+                  </button>
+                </div>
+              )}
             </div>
-            <button className="px-3 py-1.5 rounded-lg border-2 border-blue-300/60 bg-white/90 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-all duration-200 shadow-sm">
-              Edit
-            </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 bg-white/80 rounded-lg p-1 shadow-sm ring-1 ring-gray-200/50">
-              <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
-                <RotateCcw className="h-4 w-4 text-gray-600" />
-              </button>
-              <button className="p-2 rounded-md hover:bg-gray-100 transition-colors">
-                <RotateCw className="h-4 w-4 text-gray-600" />
-              </button>
-            </div>
+            <button
+              onClick={resetCanvas}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-red-600 border-2 border-red-200 bg-white/90 hover:bg-red-50 transition-all"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
 
             <button
-              onClick={onRunClick}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all duration-200"
-              title="Run"
+              onClick={() => setShowHowToUse(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-blue-600 border-2 border-blue-200 bg-white/90 hover:bg-blue-50 transition-all"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Help
+            </button>
+
+            <button
+              onClick={() => setShowReport(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-purple-600 border-2 border-purple-200 bg-white/90 hover:bg-purple-50 transition-all"
+            >
+              <FileText className="h-4 w-4" />
+              Report
+            </button>
+
+            <button
+              onClick={openPanel}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg transition-all"
             >
               <Play className="h-4 w-4" />
               Run
             </button>
-            <button className="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white/90 text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm">
-              Export
-            </button>
           </div>
         </div>
 
-        <div className="border-t h-auto overflow-hidden border-gray-200 bg-gray-400/10">
+        <div className="border-t border-gray-200 bg-gray-400/10">
           <div className="flex items-center justify-between h-12 px-10">
             <div className="flex items-center gap-8">
               <div className="relative">
@@ -266,7 +266,7 @@ export default function Header() {
                   placeholder="Search nodes..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 w-56 pl-10 pr-4 rounded-lg bg-white border-2 border-gray-200/60 text-sm outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 shadow-sm"
+                  className="h-8 w-56 pl-10 pr-4 rounded-lg bg-white border-2 border-gray-200/60 text-sm outline-none focus:border-indigo-400 transition-all"
                 />
               </div>
 
@@ -275,9 +275,9 @@ export default function Header() {
                   <button
                     key={label}
                     onClick={() => handleTabClick(label)}
-                    className={`relative text-sm font-semibold px-2 py-1 rounded-md transition-all duration-200 ${
+                    className={`text-sm font-semibold px-2 py-1 rounded-md transition-all ${
                       activeTab === label
-                      ? `text-white bg-gradient-to-r ${color} shadow-md after:absolute after:-bottom-3 after:left-1/2 after:-translate-x-1/2 after:w-8 after:h-1 after:bg-gradient-to-r after:${color} after:rounded-full`
+                      ? `text-white bg-gradient-to-r ${color} shadow-md`
                       : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
                     }`}
                   >
@@ -287,40 +287,29 @@ export default function Header() {
               </div>
             </div>
 
-            {isNodesVisible && (
-              <button
-                onClick={toggleNodesVisibility}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-              >
-                <span className="text-xs font-medium text-gray-600">Hide </span>
-                <ChevronUp className="h-4 w-4 text-gray-500" />
-              </button>
-            )}
-
-            {!isNodesVisible && (
-              <button
-                onClick={toggleNodesVisibility}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-              >
-                <span className="text-xs font-medium text-gray-600">Show </span>
-                <ChevronDown className="h-4 w-4 text-gray-500" />
-              </button>
-            )}
+            <button
+              onClick={() => setIsNodesVisible(!isNodesVisible)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/80 border border-gray-300 hover:bg-gray-50 transition-all"
+            >
+              <span className="text-xs font-medium text-gray-600">
+                {isNodesVisible ? 'Hide' : 'Show'}
+              </span>
+              {isNodesVisible ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
           </div>
 
-          <div
-            className={`transition-all duration-100 ease-in-out overflow-hidden ${
-              isNodesVisible ? "max-h-96 opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-2"
-            }`}
-            style={{
-              transitionProperty: "max-height, opacity, transform",
-              transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
-          >
+          {isNodesVisible && (
             <div className="px-6 py-4">
               <div className="flex gap-4 overflow-x-auto pb-2">
                 {getFilteredNodes().map(({ label, icon: Icon, type, color }) => (
-                  <DraggableNode key={type} type={type} label={label} icon={Icon} iconColor={color} compact={false} />
+                  <DraggableNode 
+                    key={type} 
+                    type={type} 
+                    label={label} 
+                    icon={Icon} 
+                    iconColor={color} 
+                    compact={false} 
+                  />
                 ))}
               </div>
 
@@ -331,19 +320,13 @@ export default function Header() {
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
       </header>
 
-      {/* Error notification banner */}
-      {error && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-md">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            <span className="font-medium">{error}</span>
-          </div>
-        </div>
-      )}
+      {/* Popup Components */}
+      {showHowToUse && <HowToUsePopup onClose={() => setShowHowToUse(false)} />}
+      {showReport && <ReportPopup onClose={() => setShowReport(false)} />}
     </>
   );
 }
