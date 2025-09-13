@@ -120,6 +120,11 @@ export const RunPanel = () => {
             ? `https://${process.env.REACT_APP_API_URL}`
             : 'http://localhost:8000';
 
+             console.log("NODE_ENV:", process.env.NODE_ENV);
+  console.log("REACT_APP_API_URL:", process.env.REACT_APP_API_URL);
+  console.log("API_BASE_URL:", API_BASE_URL);
+  console.log("Full URL:", `${API_BASE_URL}/api/gemini`);
+
           const response = await fetch(`${API_BASE_URL}/api/gemini`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
