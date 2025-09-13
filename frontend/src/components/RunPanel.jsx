@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRunPanelStore } from '../stores/useRunPanelStore';
 import { useStore } from '../store';
 import { useVariableStore } from '../stores/variableStore';
-import { 
+import {
   Send, MessageSquare, XCircle, Loader2, Copy, Check, RotateCcw, X
 } from 'lucide-react';
 
@@ -16,7 +16,7 @@ export const RunPanel = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentValidation, setCurrentValidation] = useState({ valid: false, message: '' });
   const [copiedMessageId, setCopiedMessageId] = useState(null);
-  
+
   const messagesEndRef = useRef(null);
 
   const validateWorkflow = useCallback(() => {
@@ -38,10 +38,10 @@ export const RunPanel = () => {
       connectedNodes.add(edge.source);
       connectedNodes.add(edge.target);
     });
-    
+
     const disconnectedInputs = inputNodes.filter(node => !connectedNodes.has(node.id));
     const disconnectedOutputs = outputNodes.filter(node => !connectedNodes.has(node.id));
-    
+
     if (disconnectedInputs.length > 0) return { valid: false, message: 'Connect Input node' };
     if (disconnectedOutputs.length > 0) return { valid: false, message: 'Connect Output node' };
 
@@ -107,15 +107,20 @@ export const RunPanel = () => {
         case 'geminiLLMNode':
         case 'gemini':
           const allVars = getAllVariables();
-          const userVar = Object.entries(allVars).find(([k, v]) => k.includes('input') && v?.trim())?.[1];
+          const userVar = Object.entries(allVars).find(([k, v]) => k.includes('input') && v?.trim())?.[3];
           const conditionVar = getVariable('con');
-          
+
           let prompt = userVar || upstreamInputs.join(' ') || node.data?.prompt || '';
           if (conditionVar) prompt += `\n\nInstruction: ${conditionVar}`;
 
           if (!prompt.trim()) throw new Error('No prompt available');
 
-          const response = await fetch("http://localhost:8000/api/gemini", {
+          // Add this API_BASE_URL configuration
+          const API_BASE_URL = process.env.NODE_ENV === 'production'
+            ? `https://${process.env.REACT_APP_API_URL}`
+            : 'http://localhost:8000';
+
+          const response = await fetch(`${API_BASE_URL}/api/gemini`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -153,7 +158,7 @@ export const RunPanel = () => {
         case 'output':
           result = upstreamInputs[upstreamInputs.length - 1] || '';
           if (!result.trim()) {
-            const outputVars = Object.entries(variables).filter(([key, value]) => 
+            const outputVars = Object.entries(variables).filter(([key, value]) =>
               (key.includes('processed') || key.includes('gemini')) && value?.trim()
             );
             if (outputVars.length > 0) {
@@ -179,9 +184,9 @@ export const RunPanel = () => {
   const onSendMessage = useCallback(async () => {
     if (!inputValue.trim() || isProcessing || !currentValidation.valid) return;
 
-    const userMessage = { 
-      id: Date.now(), 
-      sender: 'user', 
+    const userMessage = {
+      id: Date.now(),
+      sender: 'user',
       text: inputValue,
       timestamp: new Date()
     };
@@ -193,16 +198,16 @@ export const RunPanel = () => {
 
     try {
       const response = await executeWorkflow(currentInput);
-      setMessages(prev => [...prev, { 
-        id: Date.now() + 1, 
-        sender: 'bot', 
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        sender: 'bot',
         text: response,
         timestamp: new Date()
       }]);
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        id: Date.now() + 1, 
-        sender: 'error', 
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        sender: 'error',
         text: error.message,
         timestamp: new Date()
       }]);
@@ -249,7 +254,7 @@ export const RunPanel = () => {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3">
       <div className="bg-white rounded-lg shadow-lg border w-full max-w-4xl h-[80vh] flex flex-col">
-        
+
         <div className="flex items-center justify-between p-3 border-b bg-slate-100">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-slate-700" />
@@ -259,15 +264,15 @@ export const RunPanel = () => {
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <button 
-              onClick={resetChat} 
+            <button
+              onClick={resetChat}
               className="p-1 text-slate-600 hover:bg-slate-200 rounded text-xs"
               title="Reset"
             >
               <RotateCcw className="w-3 h-3" />
             </button>
-            <button 
-              onClick={closePanel} 
+            <button
+              onClick={closePanel}
               className="p-1 text-slate-600 hover:bg-slate-200 rounded"
               title="Close"
             >
@@ -277,14 +282,14 @@ export const RunPanel = () => {
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          
+
           {!currentValidation.valid && (
             <div className="flex-1 flex items-center justify-center p-6">
               <div className="text-center max-w-sm">
                 <XCircle className="w-8 h-8 text-red-500 mx-auto mb-3" />
                 <h3 className="text-sm font-medium text-slate-900 mb-2">Setup Required</h3>
                 <p className="text-xs text-slate-600 mb-4">{currentValidation.message}</p>
-                
+
                 <div className="bg-slate-50 p-3 rounded text-left">
                   <p className="text-xs font-medium mb-2 text-slate-700">Required:</p>
                   <div className="space-y-1">
@@ -321,23 +326,22 @@ export const RunPanel = () => {
                 <div className="space-y-3">
                   {messages.map(({ id, sender, text, timestamp }) => (
                     <div key={id} className={`flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`group max-w-xs px-3 py-2 rounded-lg text-sm ${
-                        sender === 'user' 
-                          ? 'bg-slate-700 text-white' 
+                      <div className={`group max-w-xs px-3 py-2 rounded-lg text-sm ${sender === 'user'
+                          ? 'bg-slate-700 text-white'
                           : sender === 'error'
-                          ? 'bg-red-100 text-red-800 border border-red-200'
-                          : 'bg-white text-slate-900 border border-slate-200'
-                      }`}>
+                            ? 'bg-red-100 text-red-800 border border-red-200'
+                            : 'bg-white text-slate-900 border border-slate-200'
+                        }`}>
                         <div className="whitespace-pre-wrap">{text}</div>
                         <div className="flex items-center justify-between mt-2 text-xs opacity-70">
                           <span>{timestamp.toLocaleTimeString()}</span>
                           {sender !== 'user' && (
-                            <button 
-                              onClick={() => copyText(text, id)} 
+                            <button
+                              onClick={() => copyText(text, id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity"
                             >
-                              {copiedMessageId === id ? 
-                                <Check className="w-3 h-3 text-green-600" /> : 
+                              {copiedMessageId === id ?
+                                <Check className="w-3 h-3 text-green-600" /> :
                                 <Copy className="w-3 h-3" />
                               }
                             </button>

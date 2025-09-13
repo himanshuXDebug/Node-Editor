@@ -24,7 +24,8 @@ export const GeminiLLMNode = ({ id, data, selected }) => {
   );
 
   const { updateNodeData } = useStore();
-  const { getAllVariables, interpolateVariables, setVariable } = useVariableStore();
+  const { getAllVariables, interpolateVariables, setVariable } =
+    useVariableStore();
 
   const isPersonalAPIActive = localPersonalAPI.trim() !== "";
   const availableVariables = getAllVariables();
@@ -82,7 +83,13 @@ Ensure your response adheres to all guidelines while being helpful.`;
         prompt: finalPrompt,
         model: "gemini-2.5-flash",
       };
-      const res = await fetch("http://localhost:8000/api/gemini", {
+
+      const API_BASE_URL =
+        process.env.NODE_ENV === "production"
+          ? `https://${process.env.REACT_APP_API_URL}`
+          : "http://localhost:8000";
+
+      const res = await fetch(`${API_BASE_URL}/api/gemini`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -90,32 +97,31 @@ Ensure your response adheres to all guidelines while being helpful.`;
 
       if (!res.ok) {
         let errorMessage = `API Error: ${res.status} ${res.statusText}`;
-        
+
         try {
           const errorData = await res.json();
           if (res.status === 401 || res.status === 403) {
             if (isPersonalAPIActive) {
-              errorMessage = "Invalid Personal API Key - Please check your Gemini API key";
+              errorMessage =
+                "Invalid Personal API Key - Please check your Gemini API key";
             } else {
-              errorMessage = "Backend API Authentication Failed - Contact administrator";
+              errorMessage =
+                "Backend API Authentication Failed - Contact administrator";
             }
-          }
-          else if (res.status === 429) {
+          } else if (res.status === 429) {
             errorMessage = "Rate limit exceeded - Please try again later";
-          }
-          else if (res.status === 402) {
-            errorMessage = "API quota exceeded or billing issue - Check your Google AI account";
-          }
-          else if (res.status === 400) {
-            errorMessage = `Bad Request: ${errorData.error?.message || "Invalid request parameters"}`;
-          }
-          else if (res.status >= 500) {
+          } else if (res.status === 402) {
+            errorMessage =
+              "API quota exceeded or billing issue - Check your Google AI account";
+          } else if (res.status === 400) {
+            errorMessage = `Bad Request: ${
+              errorData.error?.message || "Invalid request parameters"
+            }`;
+          } else if (res.status >= 500) {
             errorMessage = "Server Error - API service temporarily unavailable";
-          }
-          else if (errorData.error?.message) {
+          } else if (errorData.error?.message) {
             errorMessage = `Error: ${errorData.error.message}`;
           }
-          
         } catch (parseError) {
           console.error("Error parsing API error response:", parseError);
         }
@@ -130,7 +136,7 @@ Ensure your response adheres to all guidelines while being helpful.`;
       }
 
       let output = result.output;
-      
+
       output = output
         .replace(/\*\*(.*?)\*\*/g, "$1")
         .replace(/\*(.*?)\*/g, "$1")
@@ -139,12 +145,10 @@ Ensure your response adheres to all guidelines while being helpful.`;
         .trim();
 
       setResponse(output);
-
     } catch (err) {
-  
-      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      if (err.name === "TypeError" && err.message.includes("fetch")) {
         setResponse("Network Error - Unable to connect to API server");
-      } else if (err.name === 'AbortError') {
+      } else if (err.name === "AbortError") {
         setResponse("Request Timeout - Please try again");
       } else {
         setResponse("Unexpected Error: " + err.message);
