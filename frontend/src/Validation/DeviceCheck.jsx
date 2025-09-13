@@ -27,11 +27,10 @@ export const DeviceAndLinkCheck = ({ children }) => {
 
   const handleRedirect = () => {
     setIsRedirecting(true);
-    const productionUrl = 'https://your-production-domain.com';
+    const productionUrl = 'https://visual-node-editor.up.railway.app/';
     window.open(productionUrl, '_blank');
   };
 
-  // Mobile Block Screen
   if (isMobile) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
