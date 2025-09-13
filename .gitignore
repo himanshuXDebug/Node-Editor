@@ -14,3 +14,5 @@ Thumbs.db
 
 # extra app
 cloc.exe
+
+__pycache__/route.cpython-312.pyc
