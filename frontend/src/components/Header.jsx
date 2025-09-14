@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { FiGithub} from 
+'react-icons/fi';
+import { motion } from 'framer-motion';
 import {
   ChevronRight,
   Play,
@@ -183,6 +186,9 @@ export default function Header() {
     if (e.key === 'Escape') cancelEditingName();
   };
 
+  const socialLinks = [
+    { icon: FiGithub, href: 'http://github.com/himanshuXDebug/', label: 'GitHub' }
+  ];
   return (
     <>
       <header className="border-b-2 border-gray-200/60 bg-gradient-to-br from-white via-slate-50/50 to-gray-100/30 backdrop-blur-xl shadow-lg">
@@ -253,6 +259,22 @@ export default function Header() {
               <Play className="h-4 w-4" />
               Run
             </button>
+
+          <div className="flex items-center space-x-4">
+                    {socialLinks.map((social) => (
+                      <motion.a
+                        key={social.label}
+                        href={social.href}
+                        target="_blank"
+                        title='GitHub'
+                        rel="noopener noreferrer"
+                        className="text-gray-700 dark:text-gray-700 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200"
+                        whileHover={{ scale: 1.1 }}
+                      >
+                        <social.icon className="w-5 h-5" />
+                      </motion.a>
+                    ))}
+                  </div>
           </div>
         </div>
 
