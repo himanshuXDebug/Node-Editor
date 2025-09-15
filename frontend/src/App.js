@@ -21,9 +21,8 @@ function App() {
     <DeviceAndLinkCheck>
     <div className="h-screen flex flex-col from:bg-gray-50 to:bg-blue-600 ">
       <Header onReset={onReset} onSubmit={onSubmit} />
-       <Toaster position="top-right" />
+       <Toaster position="top-center" richColors closeButton />
       <div className="flex flex-1 overflow-hidden">
-        {/* <Sidebar /> */}
         <main className="flex-grow p-4 overflow-auto">
           <PipelineUI />
         </main>
