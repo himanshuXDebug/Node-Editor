@@ -210,7 +210,7 @@ export const ConditionNode = ({ id, data, selected }) => {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               rows={2}
-              placeholder="e.g., For each and every reply must start with 'Himanshu' with respect"
+              placeholder="e.g., For each and every reply must start with 'Hello' with respect"
               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 nodrag resize-none"
             />
           </div>
