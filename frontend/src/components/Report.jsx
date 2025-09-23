@@ -92,15 +92,18 @@ export const ReportPopup = ({ onClose }) => {
     const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
     const emailMessage = `
-Rceived a new ${reportType} report from Visual Node Editor.
+Hello,
+
+You have received a new ${reportType} report from Visual Node Editor.
 
 Report Details:
-Report ID: #${reportId}
-Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}
-Submitted: ${timestamp}
+- Report ID: #${reportId}
+- Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}
+- Submitted: ${timestamp}
 
-Report Information:
-
+Reporter Information:
+- Name: ${name || 'Anonymous'}
+- Email: ${email}
 - Component: ${selectedAvailableNode || selectedRequestNode || 'Not specified'}
 
 Description:
@@ -138,8 +141,12 @@ Visual Node Editor Team
       } else {
         throw new Error(result.message);
       }
-    } catch {
-      toast.error('Failed to send report');
+    } catch (error) {
+      console.error('Report submission error:', error);
+      toast.error('Failed to send report', {
+        description: 'Please try again later.',
+        icon: <X className="w-4 h-4" />,
+      });
     }
     setIsSubmitting(false);
   }, [reportType, description, email, name, selectedAvailableNode, selectedRequestNode, onClose]);
@@ -169,9 +176,10 @@ Visual Node Editor Team
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[80vh] flex overflow-hidden">
-
+        
+        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-
+          {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-gray-50">
             <div className="flex items-center justify-between">
               <div>
@@ -184,7 +192,9 @@ Visual Node Editor Team
             </div>
           </div>
 
+          {/* Form Content */}
           <div className="flex-1 p-6 overflow-y-auto">
+            {/* Report Type */}
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 mb-3">Report Type</label>
               <div className="grid grid-cols-3 gap-4">
@@ -203,6 +213,7 @@ Visual Node Editor Team
               </div>
             </div>
 
+            {/* Contact Info */}
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 mb-3">Contact Information</label>
               <div className="grid grid-cols-2 gap-4">
@@ -233,7 +244,7 @@ Visual Node Editor Team
               </div>
             </div>
 
-
+            {/* Description */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-3">Description *</label>
               <div className="relative">
@@ -252,6 +263,8 @@ Visual Node Editor Team
               </div>
             </div>
           </div>
+
+          {/* Footer */}
           <div className="px-6 py-4 border-t bg-gradient-to-r from-gray-50 to-slate-50 flex justify-end gap-3">
             <button
               onClick={onClose}
@@ -283,7 +296,9 @@ Visual Node Editor Team
           </div>
         </div>
 
+        {/* Fixed Sidebar */}
         <div className="w-80 bg-gradient-to-b from-slate-50 to-gray-100 border-l border-gray-200 flex flex-col">
+          {/* Fixed Header */}
           <div className="p-5 border-b border-gray-200">
             {reportType === 'bug' && (
               <div>
@@ -306,6 +321,7 @@ Visual Node Editor Team
             )}
           </div>
 
+          {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-5">
             {reportType === 'bug' && (
               <div className="space-y-5">
