@@ -14,5 +14,6 @@ Thumbs.db
 
 # extra app
 cloc.exe
+frontend/.gitignore
 
-__pycache__/route.cpython-312.pyc
+backend/__pycache__/route.cpython-312.pyc
