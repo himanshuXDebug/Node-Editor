@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { X, Send, AlertTriangle, Bug, MessageSquare, UserCircle, Mail, CheckCircle } from 'lucide-react';
+import { X, Send, Bug, AlertTriangle, MessageSquare, UserCircle, Mail, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import emailjs from 'emailjs-com';
 
 const AVAILABLE_NODES = {
   'Objects': ['Input', 'Output'],
@@ -21,20 +22,22 @@ const NOT_AVAILABLE_NODES = {
 const ReportTypeCard = React.memo(({ type, icon: Icon, label, color, desc, isSelected, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-full p-4 rounded-xl border-2 transition-all duration-200 ${
+    className={`w-full p-4 rounded-lg border text-left transition-colors ${
       isSelected 
-        ? `border-${color}-400 bg-${color}-50 shadow-md` 
-        : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+        ? `border-${color}-300 bg-${color}-50 ring-1 ring-${color}-200` 
+        : 'border-gray-200 bg-white hover:border-gray-300'
     }`}
   >
-    <div className="text-center">
-      <div className={`inline-flex p-3 rounded-lg mb-2 ${isSelected ? `bg-${color}-100` : 'bg-gray-100'}`}>
-        <Icon className={`w-5 h-5 ${isSelected ? `text-${color}-600` : 'text-gray-500'}`} />
+    <div className="flex items-center gap-3">
+      <div className={`p-2 rounded ${isSelected ? `bg-${color}-100` : 'bg-gray-100'}`}>
+        <Icon className={`w-5 h-5 ${isSelected ? `text-${color}-600` : 'text-gray-600'}`} />
       </div>
-      <div className={`font-semibold text-sm mb-1 ${isSelected ? `text-${color}-900` : 'text-gray-900'}`}>
-        {label}
+      <div>
+        <div className={`font-semibold text-sm ${isSelected ? `text-${color}-900` : 'text-gray-900'}`}>
+          {label}
+        </div>
+        <div className="text-xs text-gray-500">{desc}</div>
       </div>
-      <div className="text-xs text-gray-600">{desc}</div>
     </div>
   </button>
 ));
@@ -42,16 +45,16 @@ const ReportTypeCard = React.memo(({ type, icon: Icon, label, color, desc, isSel
 const NodeCard = React.memo(({ node, tab, isSelected, onSelect, color }) => (
   <button
     onClick={onSelect}
-    className={`w-full p-3 rounded-lg border transition-all duration-150 text-left ${
+    className={`w-full p-3 rounded border text-left transition-colors ${
       isSelected 
-        ? `border-${color}-300 bg-${color}-50 shadow-sm` 
+        ? `border-${color}-200 bg-${color}-50` 
         : 'border-gray-200 bg-white hover:border-gray-300'
     }`}
   >
-    <div className="flex items-center gap-3">
-      <div className={`w-2.5 h-2.5 rounded-full ${isSelected ? `bg-${color}-500` : 'bg-gray-300'}`} />
+    <div className="flex items-center gap-2">
+      <div className={`w-2 h-2 rounded-full ${isSelected ? `bg-${color}-500` : 'bg-gray-300'}`} />
       <div>
-        <div className={`font-medium text-sm ${isSelected ? `text-${color}-900` : 'text-gray-900'}`}>
+        <div className={`font-medium text-xs ${isSelected ? `text-${color}-900` : 'text-gray-900'}`}>
           {node}
         </div>
         <div className="text-xs text-gray-500">{tab}</div>
@@ -86,67 +89,56 @@ export const ReportPopup = ({ onClose }) => {
       return;
     }
 
+    const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
+    const ownerTemplateId = process.env.REACT_APP_EMAILJS_OWNER_TEMPLATE_ID;
+    const autoReplyTemplateId = process.env.REACT_APP_EMAILJS_AUTOREPLY_TEMPLATE_ID;
+    const userId = process.env.REACT_APP_EMAILJS_USER_ID;
+
+    if (!serviceId || !ownerTemplateId || !autoReplyTemplateId || !userId) {
+      toast.error('Service unavailable');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const reportId = Date.now().toString();
     const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
-    const emailMessage = `
-Hello,
+    const ownerTemplateParams = {
+      report_type: reportType.toUpperCase(),
+      report_id: reportId,
+      user_name: name || 'Anonymous',
+      user_email: email,
+      description: description,
+      selected_node: selectedAvailableNode || selectedRequestNode || 'Not specified',
+      timestamp: timestamp,
+      type_color: reportType === 'bug' ? '#dc2626' : reportType === 'feature' ? '#2563eb' : '#16a34a',
+      priority_level: reportType === 'bug' ? 'HIGH' : reportType === 'feature' ? 'MEDIUM' : 'LOW',
+      priority_color: reportType === 'bug' ? '#dc2626' : reportType === 'feature' ? '#2563eb' : '#16a34a'
+    };
 
-You have received a new ${reportType} report from Visual Node Editor.
-
-Report Details:
-- Report ID: #${reportId}
-- Type: ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}
-- Submitted: ${timestamp}
-
-Reporter Information:
-- Name: ${name || 'Anonymous'}
-- Email: ${email}
-- Component: ${selectedAvailableNode || selectedRequestNode || 'Not specified'}
-
-Description:
-${description}
-
-To respond, simply reply to this email.
-
-Best regards,
-Visual Node Editor Team
-    `;
-
-    const formData = new FormData();
-    formData.append('access_key', '955f7131-2354-4a9a-8c4c-f1150e4eac31');
-    formData.append('name', name || 'Anonymous');
-    formData.append('email', email);
-    formData.append('subject', `Visual Node Editor - ${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report #${reportId}`);
-    formData.append('message', emailMessage);
-    formData.append('from_name', 'Visual Node Editor');
-    formData.append('replyto', email);
+    const autoReplyParams = {
+      user_name: name || 'User',
+      user_email: email,
+      report_type: reportType,
+      report_id: reportId,
+      selected_node: selectedAvailableNode || selectedRequestNode || 'Not specified',
+      timestamp: timestamp,
+      description: description
+    };
 
     try {
-      const response = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        body: formData
+      await emailjs.send(serviceId, ownerTemplateId, ownerTemplateParams, userId);
+      await emailjs.send(serviceId, autoReplyTemplateId, autoReplyParams, userId);
+      
+      toast.success('Report sent successfully', {
+        description: `ID: ${reportId}`,
+        icon: <CheckCircle className="w-4 h-4" />,
       });
+      setTimeout(() => onClose(), 800);
       
-      const result = await response.json();
-      
-      if (result.success) {
-        toast.success('Report sent successfully!', {
-          description: `Report ID: #${reportId}`,
-          icon: <CheckCircle className="w-4 h-4" />,
-        });
-        setTimeout(() => onClose(), 800);
-      } else {
-        throw new Error(result.message);
-      }
     } catch (error) {
-      console.error('Report submission error:', error);
-      toast.error('Failed to send report', {
-        description: 'Please try again later.',
-        icon: <X className="w-4 h-4" />,
-      });
+      toast.error('Failed to send report');
     }
     setIsSubmitting(false);
   }, [reportType, description, email, name, selectedAvailableNode, selectedRequestNode, onClose]);
@@ -164,9 +156,9 @@ Visual Node Editor Team
   }, [description, email, reportType, selectedAvailableNode]);
 
   const reportTypeButtons = useMemo(() => [
-    { type: 'bug', icon: Bug, label: 'Bug Report', color: 'red', desc: 'Report issue' },
-    { type: 'feature', icon: AlertTriangle, label: 'Feature Request', color: 'blue', desc: 'Request feature' },
-    { type: 'feedback', icon: MessageSquare, label: 'Feedback', color: 'green', desc: 'Share thoughts' }
+    { type: 'bug', icon: Bug, label: 'Bug Report', color: 'red', desc: 'Technical issue' },
+    { type: 'feature', icon: AlertTriangle, label: 'Feature Request', color: 'blue', desc: 'New functionality' },
+    { type: 'feedback', icon: MessageSquare, label: 'Feedback', color: 'green', desc: 'General input' }
   ], []);
 
   const currentReportType = useMemo(() => {
@@ -175,107 +167,109 @@ Visual Node Editor Team
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[80vh] flex overflow-hidden">
+      <div className="bg-white rounded-xl shadow-xl max-w-5xl h-[80vh] flex overflow-hidden">
         
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-gray-50">
+          <div className="px-5 py-4 border-b bg-gray-50">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Submit Report</h1>
-                <p className="text-sm text-gray-600">Help us improve the platform</p>
+                <h1 className="text-lg font-bold text-gray-900">Submit Report</h1>
+                <p className="text-sm text-gray-600">Professional issue tracking</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+              <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
           </div>
 
-          {/* Form Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            {/* Report Type */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Report Type</label>
-              <div className="grid grid-cols-3 gap-4">
-                {reportTypeButtons.map(({ type, icon, label, color, desc }) => (
-                  <ReportTypeCard
-                    key={type}
-                    type={type}
-                    icon={icon}
-                    label={label}
-                    color={color}
-                    desc={desc}
-                    isSelected={reportType === type}
-                    onClick={() => handleReportTypeChange(type)}
-                  />
-                ))}
+          <div className="flex-1 p-5 overflow-y-auto">
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">Report Type</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {reportTypeButtons.map(({ type, icon, label, color, desc }) => (
+                    <ReportTypeCard
+                      key={type}
+                      type={type}
+                      icon={icon}
+                      label={label}
+                      color={color}
+                      desc={desc}
+                      isSelected={reportType === type}
+                      onClick={() => handleReportTypeChange(type)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Contact Info */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Contact Information</label>
               <div className="grid grid-cols-2 gap-4">
-                <div className="relative">
-                  <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name (optional)"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                  />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Name</label>
+                  <div className="relative">
+                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                      className="w-full pl-9 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                  </div>
                 </div>
-                <div className="relative">
-                  <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${emailError ? 'text-red-400' : 'text-gray-400'}`} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={handleEmailChange}
-                    placeholder="your@email.com *"
-                    required
-                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 outline-none transition-colors ${
-                      emailError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                    }`}
-                  />
-                  {emailError && <div className="text-xs text-red-500 mt-1 pl-1">{emailError}</div>}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${emailError ? 'text-red-400' : 'text-gray-400'}`} />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={handleEmailChange}
+                      placeholder="your@email.com"
+                      required
+                      className={`w-full pl-9 pr-3 py-3 border rounded-lg focus:ring-2 outline-none ${
+                        emailError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
+                    />
+                  </div>
+                  {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
                 </div>
               </div>
-            </div>
 
-            {/* Description */}
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Description *</label>
-              <div className="relative">
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={`Describe your ${reportType} in detail...`}
-                  required
-                  rows={5}
-                  maxLength={1000}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-colors"
-                />
-                <div className="absolute bottom-3 right-3 text-sm text-gray-400 bg-white px-2 rounded">
-                  {description.length}/1000
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={`Describe your ${reportType} clearly and concisely...`}
+                    required
+                    rows={4}
+                    maxLength={1000}
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                  />
+                  <div className="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-2 rounded">
+                    {description.length}/1000
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t bg-gradient-to-r from-gray-50 to-slate-50 flex justify-end gap-3">
+          <div className="px-5 py-4 border-t bg-gray-50 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={!isFormValid || isSubmitting}
-              className={`flex items-center gap-2 px-6 py-2.5 text-sm text-white rounded-lg font-medium transition-all disabled:opacity-50 hover:shadow-lg ${
+              className={`flex items-center gap-2 px-6 py-2 text-white rounded-lg font-medium disabled:opacity-50 ${
                 currentReportType?.type === 'bug' ? 'bg-red-600 hover:bg-red-700' :
                 currentReportType?.type === 'feature' ? 'bg-blue-600 hover:bg-blue-700' :
                 'bg-green-600 hover:bg-green-700'
@@ -289,51 +283,48 @@ Visual Node Editor Team
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Send Report
+                  Submit
                 </>
               )}
             </button>
           </div>
         </div>
 
-        {/* Fixed Sidebar */}
-        <div className="w-80 bg-gradient-to-b from-slate-50 to-gray-100 border-l border-gray-200 flex flex-col">
-          {/* Fixed Header */}
-          <div className="p-5 border-b border-gray-200">
+        <div className="w-72 bg-gray-50 border-l flex flex-col">
+          <div className="p-4 border-b">
             {reportType === 'bug' && (
               <div>
-                <h3 className="font-bold text-gray-900 mb-1">Select Affected Node</h3>
-                <p className="text-sm text-gray-600">Which node has issues?</p>
-                {!selectedAvailableNode && <p className="text-xs text-red-500 mt-1 font-medium">* Required for bug reports</p>}
+                <h3 className="font-semibold text-gray-900 mb-1">Affected Node</h3>
+                <p className="text-xs text-gray-600">Select the problematic component</p>
+                {!selectedAvailableNode && <p className="text-xs text-red-500 mt-1">* Required</p>}
               </div>
             )}
             {reportType === 'feature' && (
               <div>
-                <h3 className="font-bold text-gray-900 mb-1">Request a Node</h3>
-                <p className="text-sm text-gray-600">What would you like?</p>
+                <h3 className="font-semibold text-gray-900 mb-1">Request Node</h3>
+                <p className="text-xs text-gray-600">Choose desired functionality</p>
               </div>
             )}
             {reportType === 'feedback' && (
               <div>
-                <h3 className="font-bold text-gray-900 mb-1">General Feedback</h3>
-                <p className="text-sm text-gray-600">Share your thoughts</p>
+                <h3 className="font-semibold text-gray-900 mb-1">General Feedback</h3>
+                <p className="text-xs text-gray-600">Share your thoughts</p>
               </div>
             )}
           </div>
 
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto p-4">
             {reportType === 'bug' && (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {Object.entries(AVAILABLE_NODES).map(([category, nodes]) => (
                   <div key={category}>
-                    <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
                       {category}
-                      <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
+                      <span className="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
                         {nodes.length}
                       </span>
                     </h4>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {nodes.map(node => (
                         <NodeCard
                           key={node}
@@ -351,16 +342,16 @@ Visual Node Editor Team
             )}
 
             {reportType === 'feature' && (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {Object.entries(NOT_AVAILABLE_NODES).map(([category, nodes]) => (
                   <div key={category}>
-                    <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-2">
                       {category}
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
+                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
                         {nodes.length}
                       </span>
                     </h4>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {nodes.map(node => (
                         <NodeCard
                           key={node}
@@ -378,13 +369,9 @@ Visual Node Editor Team
             )}
 
             {reportType === 'feedback' && (
-              <div className="text-center py-12">
-                <div className="bg-gradient-to-br from-green-100 to-emerald-100 p-8 rounded-2xl">
-                  <MessageSquare className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    Share your thoughts about the platform, user experience, or suggestions for improvement.
-                  </p>
-                </div>
+              <div className="text-center py-8">
+                <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-xs text-gray-600">No additional selection needed</p>
               </div>
             )}
           </div>
