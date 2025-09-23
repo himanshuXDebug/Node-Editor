@@ -174,7 +174,7 @@ export const ReportPopup = ({ onClose }) => {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-lg font-bold text-gray-900">Submit Report</h1>
-                <p className="text-sm text-gray-600">Professional issue tracking</p>
+                <p className="text-sm text-gray-600">Help us to improve</p>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
