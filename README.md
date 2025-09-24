@@ -1,6 +1,6 @@
-# ⚡ Pipeline Builder
+# ⚡ Workflow automation platform 
 
-**Project Status:** Under Development  
+**Project Status:** Preview or testing phase completed  
 Some features may not work properly or may not meet your expectations yet. Stay tuned for updates!  
 
 ---
