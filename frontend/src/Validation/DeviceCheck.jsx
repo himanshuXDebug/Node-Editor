@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Smartphone, ExternalLink, AlertTriangle, Globe, ArrowRight, X } from 'lucide-react';
+import { Monitor, Eye, Zap, Link } from 'lucide-react';
 
 export const DeviceAndLinkCheck = ({ children }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [isVercelLink, setIsVercelLink] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState('');
 
   useEffect(() => {
     const checkDevice = () => {
@@ -18,191 +19,129 @@ export const DeviceAndLinkCheck = ({ children }) => {
 
     const checkVercelLink = () => {
       const hostname = window.location.hostname;
-      return hostname.includes('.vercel.app') || hostname.includes('.vercel.com')  ||  hostname.includes('localhost');
+      return hostname.includes('.vercel.app') || hostname.includes('.vercel.com') || hostname.includes('localhost');
     };
 
-    setIsMobile(checkDevice());
-    setIsVercelLink(checkVercelLink());
+    const updateStates = () => {
+      setIsMobile(checkDevice());
+      setIsVercelLink(checkVercelLink());
+      setCurrentUrl(window.location.href);
+    };
+
+    updateStates();
+    const handleResize = () => {
+      setIsMobile(checkDevice());
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(handleResize, 100);
+    });
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   const handleRedirect = () => {
-    setIsRedirecting(true);
-    const productionUrl = 'https://visual-node-editor.up.railway.app/';
-    window.open(productionUrl, '_blank');
+     setIsRedirecting(true);
+    window.location.href = 'https://visual-node-editor.up.railway.app/';
   };
 
   if (isMobile) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-full max-w-sm mx-auto">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white border rounded-lg p-6 max-w-sm w-full text-center">
+          <Monitor className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">Desktop Required</h1>
+          <p className="text-gray-600 mb-4">This app works best on desktop devices</p>
           
-          {/* Card */}
-          <div className="bg-white shadow-sm border rounded-lg overflow-hidden">
-            
-            {/* Header */}
-            <div className="px-6 py-8 text-center border-b">
-              <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Monitor className="w-6 h-6 text-slate-600" />
-              </div>
-              <h1 className="text-lg font-semibold text-slate-900 mb-2">Desktop Required</h1>
-              <p className="text-sm text-slate-600">This application is designed for desktop use only</p>
+          <div className="mb-4 p-3 bg-gray-50 rounded border text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <Link className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">You are here:</span>
             </div>
-            
-            {/* Content */}
-            <div className="px-6 py-6">
-              <div className="space-y-4">
-                
-                {/* Current Device */}
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                  <Smartphone className="w-4 h-4 text-slate-500" />
-                  <div>
-                    <div className="text-sm font-medium text-slate-700">Mobile Device Detected</div>
-                    <div className="text-xs text-slate-500">Screen: {window.innerWidth}px</div>
-                  </div>
-                </div>
-                
-                {/* Requirements */}
-                <div className="text-sm">
-                  <div className="font-medium text-slate-700 mb-2">System Requirements:</div>
-                  <ul className="space-y-1 text-slate-600">
-                    <li className="flex items-center gap-2">
-                      <div className="w-1 h-1 bg-slate-400 rounded-full"></div>
-                      Desktop or laptop computer
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1 h-1 bg-slate-400 rounded-full"></div>
-                      Minimum 1024px screen width
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1 h-1 bg-slate-400 rounded-full"></div>
-                      Modern web browser
-                    </li>
-                  </ul>
-                </div>
-              </div>
+            <div className="text-xs font-mono bg-gray-400 text-gray-600 break-all">
+              {currentUrl}
             </div>
           </div>
           
-          {/* Footer */}
-          <div className="text-center mt-4">
-            <p className="text-xs text-slate-500">Please switch to a desktop device to continue</p>
+          <div className="text-sm text-gray-500">
+            Screen width: {window.innerWidth}px (minimum: 1024px)
           </div>
         </div>
       </div>
     );
   }
 
-  // Vercel Warning Screen
   if (isVercelLink) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md mx-auto">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white border rounded-lg p-6 max-w-lg w-full">
           
-          {/* Main Card */}
-          <div className="bg-white shadow-sm border rounded-lg overflow-hidden">
-            
-            {/* Header */}
-            <div className="px-6 py-6 text-center border-b">
-              <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-6 h-6 text-amber-600" />
-              </div>
-              <h1 className="text-lg font-semibold text-slate-900 mb-2">Preview Mode</h1>
-              <p className="text-sm text-slate-600">Limited functionality available</p>
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">Visual Node Editor</h1>
+            <p className="text-gray-600">Choose your experience</p>
+          </div>
+
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Link className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-900">You are here with:</span>
             </div>
+            <div className="text-sm font-mono text-blue-800 break-all mb-2">
+              {currentUrl}
+            </div>
+            <p className="text-xs text-blue-700">
+              This URL is only for preview - limited functionality available
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-6">
             
-            {/* Content */}
-            <div className="px-6 py-6 space-y-6">
-              
-              {/* Current URL */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Globe className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700">Current URL</span>
-                </div>
-                <div className="text-xs font-mono text-slate-600 bg-slate-50 p-2 rounded border break-all">
-                  {window.location.hostname}
-                </div>
+            <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+              <div className="flex items-center gap-3 mb-2">
+                <Eye className="w-5 h-5 text-blue-600" />
+                <h3 className="font-medium text-gray-900">Preview Mode</h3>
+                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded">Current</span>
               </div>
-              
-              {/* Warning */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800">
-                  You're using a Vercel preview deployment. Backend features and AI processing are disabled.
-                </p>
-              </div>
-              
-              {/* Features Comparison */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-slate-700">Available Features:</div>
-                
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="space-y-2">
-                    <div className="font-medium text-slate-600">Preview Mode</div>
-                    <div className="space-y-1 text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <X className="w-3 h-3 text-red-500" />
-                        <span>No backend</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <X className="w-3 h-3 text-red-500" />
-                        <span>No AI processing</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <X className="w-3 h-3 text-red-500" />
-                        <span>Limited features</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="font-medium text-slate-600">Production Mode</div>
-                    <div className="space-y-1 text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <span>Full backend</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <span>AI enabled</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <span>All features</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Frontend-only version for design exploration. Perfect if you just want to see the project interface.
+              </p>
+              <div className="text-xs text-gray-500">
+                ✓ UI Preview • ✗ No Backend • ✗ No AI Processing
               </div>
             </div>
-            
-            {/* Actions */}
-            <div className="px-6 py-4 bg-slate-50 border-t space-y-3">
-              <button
-                onClick={handleRedirect}
-                disabled={isRedirecting}
-                className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-2.5 rounded-lg hover:bg-slate-800 transition-colors font-medium disabled:opacity-50 text-sm"
-              >
-                {isRedirecting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Opening...</span>
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="w-4 h-4" />
-                    <span>Open Production App</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </>
-                )}
-              </button>
-              
-              <button 
-                onClick={() => setIsVercelLink(false)}
-                className="w-full text-xs text-slate-500 hover:text-slate-700 py-2"
-              >
-                Continue with preview mode
-              </button>
+
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Zap className="w-5 h-5 text-green-600" />
+                <h3 className="font-medium text-gray-900">Production Mode</h3>
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Full App</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Complete application with backend and AI processing. Use this for actual workflow automation.
+              </p>
+              <div className="text-xs text-gray-500">
+                ✓ Full Features • ✓ Backend API • ✓ AI Processing
+              </div>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleRedirect}
+              className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+            >Open Production App</button>
+            
+            <button 
+              onClick={() => setIsVercelLink(false)}
+              className="w-full text-gray-600 py-3 hover:text-gray-800 transition-colors"
+            >
+              Continue with Preview Mode
+            </button>
           </div>
         </div>
       </div>
